@@ -91,8 +91,7 @@ refine_fn (p4est_t * p4est, p4est_topidx_t which_tree,
     P4EST_ASSERT (offsj + j < ple);
     for (i = 0; i < tilelen; ++i) {
       P4EST_ASSERT (offsi + i < ple);
-      d =
-        hw32_header_data + 4 * (ple * (ple - 1 - (offsj + j)) + (offsi + i));
+      d = hw32_header_data + 4 * (ple * (ple - 1 - (offsj + j)) + (offsi + i)); // TODO: print out?
       HW32_HEADER_PIXEL (d, p);
       P4EST_ASSERT (p[0] == p[1] && p[1] == p[2]);      /* Grayscale image */
       if (p[0] < 128) {
