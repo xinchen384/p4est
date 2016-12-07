@@ -25,7 +25,7 @@ static int refine_fn_h(p4est_t * p4est, p4est_topidx_t which_tree,
 
   P4EST_ASSERT (which_tree == 0);
   /* We do not want to refine deeper than a given maximum level. */
-  if (quadrant->level > plv) {
+  if (quadrant->level >= plv) {
     return 0;
   }
 
@@ -59,7 +59,7 @@ static int refine_fn_v(p4est_t * p4est, p4est_topidx_t which_tree,
   unsigned char       p[3];
 
   P4EST_ASSERT (which_tree == 0);
-  if (quadrant->level > plv) {
+  if (quadrant->level >= plv) {
     return 0;
   }
 
@@ -93,7 +93,7 @@ static int refine_fn_u(p4est_t * p4est, p4est_topidx_t which_tree,
   unsigned char       p[3];
 
   P4EST_ASSERT (which_tree == 0);
-  if (quadrant->level > plv) {
+  if (quadrant->level >= plv) {
     return 0;
   }
 
