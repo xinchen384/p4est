@@ -83,6 +83,7 @@
 #define p4est_inspect_t                 p8est_inspect_t
 #define p4est_position_t                p8est_position_t
 #define p4est_init_t                    p8est_init_t
+#define p4est_setop_refine_t			p8est_setop_refine_t
 #define p4est_refine_t                  p8est_refine_t
 #define p4est_coarsen_t                 p8est_coarsen_t
 #define p4est_weight_t                  p8est_weight_t
@@ -162,6 +163,11 @@
 #define p4est_reset_data                p8est_reset_data
 #define p4est_refine                    p8est_refine
 #define p4est_coarsen                   p8est_coarsen
+#define p4est_union_refine_fn			p8est_union_refine_fn
+#define p4est_intersection_refine_fn	p8est_intersection_refine_fn
+#define p4est_union						p8est_union
+#define p4est_intersection				p8est_intersection
+#define p4est_set_operation				p8est_set_operation
 #define p4est_balance                   p8est_balance
 #define p4est_partition                 p8est_partition
 #define p4est_checksum                  p8est_checksum

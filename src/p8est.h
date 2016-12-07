@@ -205,6 +205,11 @@ typedef int         (*p8est_refine_t) (p8est_t * p8est,
                                        p4est_topidx_t which_tree,
                                        p8est_quadrant_t * quadrant);
 
+/** Callback function prototype to decide for set operation-based refinement. */
+typedef int (*p8est_setop_refine_t) (p8est_t *p8est_in1, p8est_t *p8est_in2, p8est_t *p8est,
+                                       p4est_topidx_t which_tree,
+                                       p8est_quadrant_t *quadrant);
+
 /** Callback function prototype to decide for coarsening.
  * \param [in] p8est       the forest
  * \param [in] which_tree  the tree containing \a quadrant
@@ -327,6 +332,21 @@ void                p8est_refine (p8est_t * p8est,
                                   int refine_recursive,
                                   p8est_refine_t refine_fn,
                                   p8est_init_t init_fn);
+
+int p8est_union_refine_fn (p8est_t *p8est_in1, p8est_t *p8est_in2, p8est_t *p8est,
+                                       p4est_topidx_t which_tree,
+                                       p8est_quadrant_t *quadrant);
+
+int p8est_intersection_refine_fn (p8est_t *p8est_in1, p8est_t *p8est_in2, p8est_t *p8est,
+                                       p4est_topidx_t which_tree,
+                                       p8est_quadrant_t *quadrant);
+
+p8est_t *p8est_union (p8est_t *p8est1, p8est_t *p8est2);
+
+p8est_t *p8est_intersection (p8est_t *p8est1, p8est_t *p8est2);
+
+p8est_t *p8est_set_operation(p8est_t *p8est1, p8est_t *p8est2, p8est_setop_refine_t refine_setop_fn);
+
 
 /** Coarsen a forest.
  * \param [in,out] p8est  The forest is changed in place.

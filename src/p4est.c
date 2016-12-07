@@ -30,6 +30,7 @@
 #include <p8est_ghost.h>
 #include <p8est_io.h>
 #else
+#include <p4est.h>
 #include <p4est_algorithms.h>
 #include <p4est_bits.h>
 #include <p4est_communication.h>
@@ -669,6 +670,36 @@ p4est_reset_data (p4est_t * p4est, size_t data_size,
       }
     }
   }
+}
+
+int p4est_union_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
+                                       p4est_topidx_t which_tree,
+                                       p4est_quadrant_t *quadrant)
+{
+	return 0;
+}
+
+int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
+                                       p4est_topidx_t which_tree,
+                                       p4est_quadrant_t *quadrant)
+{
+	return 0;
+}
+
+
+p4est_t *p4est_union (p4est_t *p4est1, p4est_t *p4est2)
+{
+	return 0;
+}
+
+p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2)
+{
+	return 0;
+}
+
+p4est_t *p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_setop_refine_t refine_setop_fn)
+{
+	return 0;
 }
 
 void
