@@ -341,11 +341,11 @@ int p8est_intersection_refine_fn (p8est_t *p8est_in1, p8est_t *p8est_in2, p8est_
                                        p4est_topidx_t which_tree,
                                        p8est_quadrant_t *quadrant);
 
-p8est_t *p8est_union (p8est_t *p8est1, p8est_t *p8est2);
+p8est_t *p8est_union (p8est_t *p8est1, p8est_t *p8est2, p8est_t *p8est_out);
 
-p8est_t *p8est_intersection (p8est_t *p8est1, p8est_t *p8est2);
+p8est_t *p8est_intersection (p8est_t *p8est1, p8est_t *p8est2, p8est_t *p8est_out);
 
-p8est_t *p8est_set_operation(p8est_t *p8est1, p8est_t *p8est2, p8est_setop_refine_t refine_setop_fn);
+void p8est_set_operation(p8est_t *p8est1, p8est_t *p8est2, p8est_t *p8est_out, p8est_setop_refine_t refine_setop_fn);
 
 
 /** Coarsen a forest.

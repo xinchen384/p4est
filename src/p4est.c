@@ -687,19 +687,22 @@ int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_
 }
 
 
-p4est_t *p4est_union (p4est_t *p4est1, p4est_t *p4est2)
+p4est_t *p4est_union (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out)
 {
-	return 0;
+	p4est_set_operation(p4est1, p4est2, p4est_out, p4est_union_refine_fn);
+	return p4est_out;
 }
 
-p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2)
+p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out)
 {
-	return 0;
+	p4est_set_operation(p4est1, p4est2, p4est_out, p4est_intersection_refine_fn);
+	return p4est_out;
 }
 
-p4est_t *p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_setop_refine_t refine_setop_fn)
+// main logic
+void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p4est_setop_refine_t refine_setop_fn)
 {
-	return 0;
+	int x;
 }
 
 void
