@@ -46,6 +46,8 @@
 #include <zlib.h>
 #endif
 
+#include <stdio.h>
+
 #ifdef P4EST_ENABLE_MPIIO
 #define P4EST_MPIIO_WRITE
 #endif
@@ -673,10 +675,61 @@ p4est_reset_data (p4est_t * p4est, size_t data_size,
 }
 
 int p4est_union_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
-                                       p4est_topidx_t which_tree,
-                                       p4est_quadrant_t *quadrant)
+		p4est_topidx_t which_tree,
+		p4est_quadrant_t *quadrant)
 {
-	return 0;
+	p4est_tree_t *tree1, *tree2;
+	sc_array_t *quads1, *quads2;
+	int q1_index, q2_index;
+	p4est_quadrant_t *q1, *q2;
+	int q1_match = 0;
+
+	// 1st input tree
+	tree1 = p4est_tree_array_index(p4est_in1->trees, 0);
+	quads1 = &(tree1->quadrants);
+	q1_index = sc_array_bsearch(quads1, quadrant, p4est_quadrant_compare);
+	if (q1_index != -1) { // quadrant match in 1st input tree
+		q1_match = 1;
+		q1 = p4est_quadrant_array_index(quads1, q1_index);
+		if (q1->p.user_int) { // quadrant is "black"; we're done
+			quadrant->p.user_int = 1;
+			return 0;
+		}
+	}
+
+	// 2nd input tree
+	tree2 = p4est_tree_array_index(p4est_in2->trees, 0);
+	quads2 = &(tree2->quadrants);
+	q2_index = sc_array_bsearch(quads2, quadrant, p4est_quadrant_compare);
+	if (q2_index == -1 && !q1_match) { // no match on either 1st or 2nd input => refine
+		return 1;
+	} else if (q2_index == -1 && q1_match) { // match on 1st input, but not 2nd
+		if (quadrant->p.user_int == -1) { // in "subtree" case
+			quadrant->p.user_int = 0;
+			return 0;
+		} else { // entering "subtree" case; refine further
+			return -1;
+		}
+	} else { // match in 2nd input tree
+		q2 = p4est_quadrant_array_index(quads2, q2_index);
+		if (q2->p.user_int) { // quadrant is "black"; we're done
+			quadrant->p.user_int = 1;
+			return 0;
+		} else if (!q2->p.user_int && q1_match) { // corresponding matches in both inputs, so this quadrant is "white"
+			quadrant->p.user_int = 0;
+			return 0;
+		} else if (!q2->p.user_int && !q1_match) { // no match in 1st input; matched "white" in 2nd
+			if (quadrant->p.user_int == -1) { // in "subtree" case
+				quadrant->p.user_int = 0;
+				return 0;
+			} else { // entering "subtree" case; refine further
+				return -1;
+			}
+		} else {
+			printf("Unexpected case triggered in p4est_union_refine_fn\n");
+			return 0;
+		}
+	}
 }
 
 int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
@@ -727,7 +780,7 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
   int refine_recursive = 1;
 
   P4EST_GLOBAL_PRODUCTIONF ("Into " P4EST_STRING
-                            "_refine with %lld total quadrants,"
+                            "_set_operation with %lld total quadrants,"
                             " allowed level %d\n",
                             (long long) p4est_out->global_num_quadrants,
                             allowed_level);
@@ -764,7 +817,7 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
 #endif
 
     /* initial log message for this tree */
-    P4EST_VERBOSEF ("Into refine tree %lld with %llu\n", (long long) nt,
+    P4EST_VERBOSEF ("Into tree %lld set operation with %llu\n", (long long) nt,
                     (unsigned long long) tquadrants->elem_count);
 
     /* reset the quadrant counters */
@@ -807,11 +860,13 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
 
     /* run through the list and refine recursively */
     firsttime = 1;
+    int refine_flag;
     while (list->elem_count > 0) {
       qpop = p4est_quadrant_list_pop (list);
+      refine_flag = setop_refine_fn (p4est1, p4est2, p4est_out, nt, qpop);
       if (firsttime ||
           ((refine_recursive || !qpop->pad8) &&
-           setop_refine_fn (p4est1, p4est2, p4est_out, nt, qpop) &&
+           refine_flag &&
            (int) qpop->level < allowed_level)) {
         firsttime = 0;
         sc_array_resize (tquadrants,
@@ -845,6 +900,15 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
         p4est_quadrant_init_data (p4est_out, nt, c2, init_fn);
         p4est_quadrant_init_data (p4est_out, nt, c3, init_fn);
         c0->pad8 = c1->pad8 = c2->pad8 = c3->pad8 = 1;
+
+        // mark "subtree" case in future children to be refined
+        if (refine_flag == -1) {
+        	c0->p.user_int = -1;
+        	c1->p.user_int = -1;
+        	c2->p.user_int = -1;
+        	c3->p.user_int = -1;
+        }
+        // ignoring corresponding 3D case for now
 
 #ifdef P4_TO_P8
         p4est_quadrant_init_data (p4est_out, nt, c4, init_fn);
@@ -919,7 +983,7 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
     P4EST_ASSERT (p4est_tree_is_complete (tree));
 
     /* final log message for this tree */
-    P4EST_VERBOSEF ("Done refine tree %lld now %llu\n", (long long) nt,
+    P4EST_VERBOSEF ("Done tree %lld set operation now %llu\n", (long long) nt,
                     (unsigned long long) tquadrants->elem_count);
   }
   if (p4est_out->last_local_tree >= 0) {
@@ -941,7 +1005,7 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
   P4EST_ASSERT (p4est_is_valid (p4est_out));
   p4est_log_indent_pop ();
   P4EST_GLOBAL_PRODUCTIONF ("Done " P4EST_STRING
-                            "_refine with %lld total quadrants\n",
+                            "_set_operation with %lld total quadrants\n",
                             (long long) p4est_out->global_num_quadrants);
 }
 
@@ -1173,7 +1237,7 @@ p4est_refine_ext (p4est_t * p4est, int refine_recursive, int allowed_level,
     P4EST_ASSERT (p4est_tree_is_complete (tree));
 
     /* final log message for this tree */
-    P4EST_VERBOSEF ("Done refine tree %lld now %llu\n", (long long) nt,
+    P4EST_VERBOSEF ("Done tree set operation %lld now %llu\n", (long long) nt,
                     (unsigned long long) tquadrants->elem_count);
   }
   if (p4est->last_local_tree >= 0) {
