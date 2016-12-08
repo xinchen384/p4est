@@ -345,7 +345,7 @@ p8est_t *p8est_union (p8est_t *p8est1, p8est_t *p8est2, p8est_t *p8est_out);
 
 p8est_t *p8est_intersection (p8est_t *p8est1, p8est_t *p8est2, p8est_t *p8est_out);
 
-void p8est_set_operation(p8est_t *p8est1, p8est_t *p8est2, p8est_t *p8est_out, p8est_setop_refine_t refine_setop_fn);
+void p8est_set_operation(p8est_t *p8est1, p8est_t *p8est2, p8est_t *p8est_out, p8est_setop_refine_t setop_refine_fn);
 
 
 /** Coarsen a forest.

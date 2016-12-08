@@ -349,7 +349,7 @@ p4est_t *p4est_union (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out);
 
 p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out);
 
-void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p4est_setop_refine_t refine_setop_fn);
+void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p4est_setop_refine_t setop_refine_fn);
 
 /** Coarsen a forest.
  * \param [in,out] p4est  The forest is changed in place.
