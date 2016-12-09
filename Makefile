@@ -318,12 +318,10 @@ am__append_40 = \
         $(example_balance_seeds_p8est_balance_seeds_SOURCES)
 
 am__append_41 = \
-  example/set_operations/p4est_setop1 \
   example/set_operations/p4est_setop2 \
   example/set_operations/p4est_setop3
 
-am__append_42 = $(example_set_operations_p4est_setop1_SOURCES) \
-	$(example_set_operations_p4est_setop2_SOURCES) \
+am__append_42 = $(example_set_operations_p4est_setop2_SOURCES) \
 	$(example_set_operations_p4est_setop3_SOURCES)
 subdir = .
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -482,8 +480,7 @@ am__EXEEXT_12 = example/timings/p8est_timings$(EXEEXT) \
 	example/timings/p8est_tsearch$(EXEEXT)
 am__EXEEXT_13 = example/balance_seeds/p4est_balance_seeds$(EXEEXT)
 am__EXEEXT_14 = example/balance_seeds/p8est_balance_seeds$(EXEEXT)
-am__EXEEXT_15 = example/set_operations/p4est_setop1$(EXEEXT) \
-	example/set_operations/p4est_setop2$(EXEEXT) \
+am__EXEEXT_15 = example/set_operations/p4est_setop2$(EXEEXT) \
 	example/set_operations/p4est_setop3$(EXEEXT)
 am__EXEEXT_16 =  \
 	test/p4est_test_comm$(EXEEXT) \
@@ -602,14 +599,6 @@ example_points_p8est_points_OBJECTS =  \
 	$(am_example_points_p8est_points_OBJECTS)
 example_points_p8est_points_LDADD = $(LDADD)
 example_points_p8est_points_DEPENDENCIES =  \
-	./src/libp4est.la
-am__example_set_operations_p4est_setop1_SOURCES_DIST =  \
-	example/set_operations/p4est_setop1.c
-am_example_set_operations_p4est_setop1_OBJECTS = example/set_operations/p4est_setop1.$(OBJEXT)
-example_set_operations_p4est_setop1_OBJECTS =  \
-	$(am_example_set_operations_p4est_setop1_OBJECTS)
-example_set_operations_p4est_setop1_LDADD = $(LDADD)
-example_set_operations_p4est_setop1_DEPENDENCIES =  \
 	./src/libp4est.la
 am__example_set_operations_p4est_setop2_SOURCES_DIST =  \
 	example/set_operations/p4est_setop2.c
@@ -1257,7 +1246,6 @@ SOURCES = $(src_libp4est_la_SOURCES) \
 	$(example_mesh_p8est_periodicity_SOURCES) \
 	$(example_points_p4est_points_SOURCES) \
 	$(example_points_p8est_points_SOURCES) \
-	$(example_set_operations_p4est_setop1_SOURCES) \
 	$(example_set_operations_p4est_setop2_SOURCES) \
 	$(example_set_operations_p4est_setop3_SOURCES) \
 	$(example_simple_p4est_simple_SOURCES) \
@@ -1347,7 +1335,6 @@ DIST_SOURCES = $(am__src_libp4est_la_SOURCES_DIST) \
 	$(am__example_mesh_p8est_periodicity_SOURCES_DIST) \
 	$(am__example_points_p4est_points_SOURCES_DIST) \
 	$(am__example_points_p8est_points_SOURCES_DIST) \
-	$(am__example_set_operations_p4est_setop1_SOURCES_DIST) \
 	$(am__example_set_operations_p4est_setop2_SOURCES_DIST) \
 	$(am__example_set_operations_p4est_setop3_SOURCES_DIST) \
 	$(am__example_simple_p4est_simple_SOURCES_DIST) \
@@ -1892,9 +1879,8 @@ DISTCLEANFILES = _configs.sed src/p4est_config.h  P4EST_SC_SOURCE.log
 EXTRA_DIST = bootstrap p4estindent build-aux/git-version-gen \
 	build-aux/git2cl bugs doc example/steps/hw32.h \
 	example/timings/timana.awk example/timings/timana.sh \
-	example/steps/hw32.h example/set_operations/rect_horizontal1.h \
+	example/set_operations/rect_horizontal1.h \
 	example/set_operations/rect_vertical1.h \
-	example/set_operations/rect_union.h \
 	example/set_operations/cat1.h example/set_operations/cat2.h
 LDADD = ./src/libp4est.la sc/src/libsc.la
 LINT_CSOURCES = $(libp4est_compiled_sources) \
@@ -2104,7 +2090,6 @@ example_balance_seeds_p4est_balance_seeds_SOURCES = \
 example_balance_seeds_p8est_balance_seeds_SOURCES = \
         example/balance_seeds/balance_seeds3.c
 
-example_set_operations_p4est_setop1_SOURCES = example/set_operations/p4est_setop1.c
 example_set_operations_p4est_setop2_SOURCES = example/set_operations/p4est_setop2.c
 example_set_operations_p4est_setop3_SOURCES = example/set_operations/p4est_setop3.c
 
@@ -2443,13 +2428,6 @@ example/set_operations/$(am__dirstamp):
 example/set_operations/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) example/set_operations/$(DEPDIR)
 	@: > example/set_operations/$(DEPDIR)/$(am__dirstamp)
-example/set_operations/p4est_setop1.$(OBJEXT):  \
-	example/set_operations/$(am__dirstamp) \
-	example/set_operations/$(DEPDIR)/$(am__dirstamp)
-
-example/set_operations/p4est_setop1$(EXEEXT): $(example_set_operations_p4est_setop1_OBJECTS) $(example_set_operations_p4est_setop1_DEPENDENCIES) $(EXTRA_example_set_operations_p4est_setop1_DEPENDENCIES) example/set_operations/$(am__dirstamp)
-	@rm -f example/set_operations/p4est_setop1$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(example_set_operations_p4est_setop1_OBJECTS) $(example_set_operations_p4est_setop1_LDADD) $(LIBS)
 example/set_operations/p4est_setop2.$(OBJEXT):  \
 	example/set_operations/$(am__dirstamp) \
 	example/set_operations/$(DEPDIR)/$(am__dirstamp)
@@ -2999,7 +2977,6 @@ include example/mesh/$(DEPDIR)/mesh3.Po
 include example/mesh/$(DEPDIR)/periodicity3.Po
 include example/points/$(DEPDIR)/points2.Po
 include example/points/$(DEPDIR)/points3.Po
-include example/set_operations/$(DEPDIR)/p4est_setop1.Po
 include example/set_operations/$(DEPDIR)/p4est_setop2.Po
 include example/set_operations/$(DEPDIR)/p4est_setop3.Po
 include example/simple/$(DEPDIR)/simple2.Po
