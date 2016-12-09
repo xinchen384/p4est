@@ -701,8 +701,12 @@ int p4est_union_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4es
 	tree2 = p4est_tree_array_index(p4est_in2->trees, 0);
 	quads2 = &(tree2->quadrants);
 	q2_index = sc_array_bsearch(quads2, quadrant, p4est_quadrant_compare);
-	if (q2_index == -1 && !q1_match) { // no match on either 1st or 2nd input => refine
-		return 1;
+	if (q2_index == -1 && !q1_match) { // no match on either 1st or 2nd input
+		if (quadrant->p.user_int == -1) {
+			return -1; // keep refining on this "subtree"
+		} else{
+			return 1; // no match and NOT a subtree case; refine
+		}
 	} else if (q2_index == -1 && q1_match) { // "white" match on 1st input, but not 2nd
 		if (quadrant->p.user_int == -1) { // in "subtree" case
 			quadrant->p.user_int = 0;
@@ -760,7 +764,11 @@ int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_
 	quads2 = &(tree2->quadrants);
 	q2_index = sc_array_bsearch(quads2, quadrant, p4est_quadrant_compare);
 	if (q2_index == -1 && !q1_match) { // no match on either 1st or 2nd input => refine
-		return 1;
+		if (quadrant->p.user_int == -1) {
+			return -1;
+		} else {
+			return 1;
+		}
 	} else if (q2_index == -1 && q1_match) { // "black" match on 1st input, but not 2nd
 		if (quadrant->p.user_int == -1) { // in "subtree" case
 			quadrant->p.user_int = 1;
