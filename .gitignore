@@ -3,6 +3,10 @@
 *.lo
 *.Plo
 *.la
-*.ptvu
+*.pvtu
 *.vtu
 .DS_Store
+.cproject
+.settings
+.project
+sc/
