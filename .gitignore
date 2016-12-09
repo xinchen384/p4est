@@ -1,7 +1,8 @@
-.o
-.visit
-.lo
-.in
-.Plo
-.la
-sc
+*.o
+*.visit
+*.lo
+*.Plo
+*.la
+*.ptvu
+*.vtu
+.DS_Store
