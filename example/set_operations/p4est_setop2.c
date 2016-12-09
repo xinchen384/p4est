@@ -50,7 +50,7 @@ static int refine_fn_h(p4est_t * p4est, p4est_topidx_t which_tree, p4est_quadran
   if (!blackCount) {
 	  quadrant->p.user_int = WHITE;
 	  return 0;
-  } else if (blackCount == tilelen*tilelen) {
+  } else if (blackCount == 1) {
 	  quadrant->p.user_int = BLACK;
 	  return 0;
   } else {
@@ -90,7 +90,7 @@ static int refine_fn_v(p4est_t * p4est, p4est_topidx_t which_tree, p4est_quadran
   if (!blackCount) {
 	  quadrant->p.user_int = WHITE;
 	  return 0;
-  } else if (blackCount == tilelen*tilelen) {
+  } else if (blackCount == 1) {
 	  quadrant->p.user_int = BLACK;
 	  return 0;
   } else {
@@ -105,8 +105,8 @@ int main (int argc, char **argv)
 	int                 mpiret;
 	int                 recursive, partforcoarsen, balance;
 	sc_MPI_Comm         mpicomm;
-	p4est_t            *p4est_h, *p4est_v, *p4est_u;
-	p4est_connectivity_t *conn_h, *conn_v, *conn_u;
+	p4est_t            *p4est_h, *p4est_v, *p4est_u, *p4est_i;
+	p4est_connectivity_t *conn_h, *conn_v, *conn_u, *conn_i;
 
 	/* Initialize MPI; see sc_mpi.h. */
 	mpiret = sc_MPI_Init (&argc, &argv);
@@ -117,9 +117,11 @@ int main (int argc, char **argv)
 	conn_h = p4est_connectivity_new_unitsquare();
 	conn_v = p4est_connectivity_new_unitsquare();
 	conn_u = p4est_connectivity_new_unitsquare();
+	conn_i = p4est_connectivity_new_unitsquare();
 	p4est_h = p4est_new (mpicomm, conn_h, 0, NULL, NULL);
 	p4est_v = p4est_new (mpicomm, conn_v, 0, NULL, NULL);
 	p4est_u = p4est_new (mpicomm, conn_u, 0, NULL, NULL);
+	p4est_i = p4est_new (mpicomm, conn_i, 0, NULL, NULL);
 
 	/* Refine the forest recursively in parallel. */
 	recursive = 1;
@@ -128,7 +130,6 @@ int main (int argc, char **argv)
 
 	/* Union operation */
 	p4est_union(p4est_h, p4est_v, p4est_u);
-
 	// print union results
 	p4est_tree_t *tree = p4est_tree_array_index (p4est_u->trees, 0);
 	sc_array_t *quadrants = &(tree->quadrants);
@@ -142,21 +143,37 @@ int main (int argc, char **argv)
 		}
 	}
 
+	/* Intersection operation */
+	p4est_intersection(p4est_h, p4est_v, p4est_i);
+	tree = p4est_tree_array_index (p4est_i->trees, 0);
+	quadrants = &(tree->quadrants);
+	n_quads = quadrants->elem_count;
+	// print intersection results
+	for (int si = 0; si < n_quads; si++) {
+		p4est_quadrant_t *q = p4est_quadrant_array_index(quadrants, si);
+		int value = q->p.user_int;
+		if (value > 0) {
+			printf("(%d, %d), lvl %d, ", q->x / P4EST_QUADRANT_LEN(plv), q->y / P4EST_QUADRANT_LEN(5), q->level);
+			printf("value %d\n", value);
+		}
+	}
+
 	/* Write the forest to disk for visualization */
 	p4est_vtk_write_file (p4est_h, NULL, P4EST_STRING "_setop2_rectangle_h");
 	p4est_vtk_write_file (p4est_v, NULL, P4EST_STRING "_setop2_rectangle_v");
 	p4est_vtk_write_file (p4est_u, NULL, P4EST_STRING "_setop2_rectangle_union");
+	p4est_vtk_write_file (p4est_i, NULL, P4EST_STRING "_setop2_rectangle_intersection");
 
 	/* Destroy the p4est and the connectivity structure. */
 	p4est_destroy (p4est_h);
 	p4est_destroy (p4est_v);
 	p4est_destroy (p4est_u);
+	p4est_destroy (p4est_i);
 	p4est_connectivity_destroy (conn_h);
 	p4est_connectivity_destroy (conn_v);
 	p4est_connectivity_destroy (conn_u);
+	p4est_connectivity_destroy (conn_i);
 
-	/* Verify that allocations internal to p4est and sc do not leak memory.
-	 * This should be called if sc_init () has been called earlier. */
 	sc_finalize ();
 	mpiret = sc_MPI_Finalize ();
 	SC_CHECK_MPI (mpiret);
