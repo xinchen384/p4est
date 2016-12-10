@@ -1,4 +1,5 @@
-/*  GIMP header image file format (RGB): /Users/foxjas09/Desktop/rectangle_horizontal.h  */
+/*  GIMP header image file format (RGB) */
+/*  Generated using GIMP tool, exported as C source header */
 
 static unsigned int h_width = 32;
 static unsigned int h_height = 32;

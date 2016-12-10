@@ -1,4 +1,4 @@
-/*  GIMP header image file format (RGB): /Users/foxjas09/Desktop/rectangle_vertical.h  */
+/*  GIMP header image file format (RGB) */
 
 static unsigned int v_width = 32;
 static unsigned int v_height = 32;

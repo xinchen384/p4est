@@ -1,4 +1,4 @@
-/*  GIMP header image file format (RGB): /Users/foxjas09/Desktop/cat2.h  */
+/*  GIMP header image file format (RGB) */
 
 static unsigned int cat2_width = 128;
 static unsigned int cat2_height = 128;
