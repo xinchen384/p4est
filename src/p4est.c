@@ -674,6 +674,12 @@ p4est_reset_data (p4est_t * p4est, size_t data_size,
   }
 }
 
+/**
+ * p4est_set_operation uses this callback on each quadrant in order to determine whether
+ * to refine it or not. If further refining is no longer needed, we label the quadrant as
+ * either "marked" or "unmarked," corresponding to a leaf in either (or perhaps both) input
+ * trees. The union operation is then considered complete on this quadrant.
+ */
 int p4est_union_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
 		p4est_topidx_t which_tree,
 		p4est_quadrant_t *quadrant)
@@ -684,58 +690,68 @@ int p4est_union_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4es
 	p4est_quadrant_t *q1, *q2;
 	int q1_match = 0;
 
-	// 1st input tree
+	const int GRAY = -1; // indicates a quadrant match on ONE of the input trees, but further refining is needed
+	const int UNMARKED = 0;
+	const int MARKED = 1;
+
+	// Search for quadrant in 1st input tree
 	tree1 = p4est_tree_array_index(p4est_in1->trees, 0);
 	quads1 = &(tree1->quadrants);
 	q1_index = sc_array_bsearch(quads1, quadrant, p4est_quadrant_compare);
 	if (q1_index != -1) { // quadrant match in 1st input tree
 		q1_match = 1;
 		q1 = p4est_quadrant_array_index(quads1, q1_index);
-		if (q1->p.user_int) { // quadrant is "black"; we're done
-			quadrant->p.user_int = 1;
+		if (q1->p.user_int) { // quadrant is "marked"; no need to refine further
+			quadrant->p.user_int = MARKED;
 			return 0;
 		}
 	}
 
-	// 2nd input tree
+	// Search for quadrant in 2nd input tree
 	tree2 = p4est_tree_array_index(p4est_in2->trees, 0);
 	quads2 = &(tree2->quadrants);
 	q2_index = sc_array_bsearch(quads2, quadrant, p4est_quadrant_compare);
-	if (q2_index == -1 && !q1_match) { // no match on either 1st or 2nd input
-		if (quadrant->p.user_int == -1) {
-			return -1; // keep refining on this "subtree"
-		} else{
-			return 1; // no match and NOT a subtree case; refine
+	if (q2_index == -1 && !q1_match) { // no quadrant match on either input
+		if (quadrant->p.user_int == GRAY) { // "subtree" case; refine
+			return -1;
+		} else { // no match and NOT a subtree case; refine
+			return 1;
 		}
-	} else if (q2_index == -1 && q1_match) { // "white" match on 1st input, but not 2nd
-		if (quadrant->p.user_int == -1) { // in "subtree" case
-			quadrant->p.user_int = 0;
+	} else if (q2_index == -1 && q1_match) { // "unmarked" quadrant match on 1st input, only
+		if (quadrant->p.user_int == GRAY) { // "subtree" case; done
+			quadrant->p.user_int = UNMARKED;
 			return 0;
-		} else { // entering "subtree" case; refine further
+		} else { // entering "subtree" case; refine
 			return -1;
 		}
 	} else { // match in 2nd input tree
 		q2 = p4est_quadrant_array_index(quads2, q2_index);
-		if (q2->p.user_int) { // quadrant is "black"; we're done
-			quadrant->p.user_int = 1;
+		if (q2->p.user_int) { // quadrant is "marked"; we're done
+			quadrant->p.user_int = MARKED;
 			return 0;
-		} else if (!q2->p.user_int && q1_match) { // corresponding matches in both inputs, so this quadrant is "white"
-			quadrant->p.user_int = 0;
+		} else if (!q2->p.user_int && q1_match) { // corresponding matches in both inputs, so this quadrant is "unmarked"
+			quadrant->p.user_int = UNMARKED;
 			return 0;
-		} else if (!q2->p.user_int && !q1_match) { // no match in 1st input; matched "white" in 2nd
-			if (quadrant->p.user_int == -1) { // in "subtree" case
-				quadrant->p.user_int = 0;
+		} else if (!q2->p.user_int && !q1_match) { // no match in 1st input; matched "unmarked" in 2nd
+			if (quadrant->p.user_int == GRAY) { // in "subtree" case
+				quadrant->p.user_int = UNMARKED;
 				return 0;
-			} else { // entering "subtree" case; refine further
+			} else { // entering "subtree" case; refine
 				return -1;
 			}
-		} else {
+		} else { // shouldn't enter this clause
 			printf("Unexpected case triggered in p4est_union_refine_fn\n");
 			return 0;
 		}
 	}
 }
 
+/**
+ * p4est_set_operation uses this callback on each quadrant in order to determine whether
+ * to refine it or not. If further refining is no longer needed, we label the quadrant as
+ * either "marked" or "unmarked," corresponding to a leaf in either (or perhaps both) input
+ * trees. The intersection operation is then considered complete on this quadrant.
+ */
 int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
                                        p4est_topidx_t which_tree,
                                        p4est_quadrant_t *quadrant)
@@ -746,6 +762,10 @@ int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_
 	p4est_quadrant_t *q1, *q2;
 	int q1_match = 0;
 
+	const int GRAY = -1; // indicates a quadrant match on ONE of the input trees, but further refining is needed
+	const int UNMARKED = 0;
+	const int MARKED = 1;
+
 	// 1st input tree
 	tree1 = p4est_tree_array_index(p4est_in1->trees, 0);
 	quads1 = &(tree1->quadrants);
@@ -753,8 +773,8 @@ int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_
 	if (q1_index != -1) { // quadrant match in 1st input tree
 		q1_match = 1;
 		q1 = p4est_quadrant_array_index(quads1, q1_index);
-		if (!q1->p.user_int) { // quadrant is "white"; we're done
-			quadrant->p.user_int = 0;
+		if (!q1->p.user_int) { // quadrant is "unmarked"; we're done
+			quadrant->p.user_int = UNMARKED;
 			return 0;
 		}
 	}
@@ -763,35 +783,35 @@ int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_
 	tree2 = p4est_tree_array_index(p4est_in2->trees, 0);
 	quads2 = &(tree2->quadrants);
 	q2_index = sc_array_bsearch(quads2, quadrant, p4est_quadrant_compare);
-	if (q2_index == -1 && !q1_match) { // no match on either 1st or 2nd input => refine
-		if (quadrant->p.user_int == -1) {
+	if (q2_index == -1 && !q1_match) { // no match on either input
+		if (quadrant->p.user_int == GRAY) { // "subtree" case; refine
 			return -1;
-		} else {
+		} else { // no match and NOT a subtree case; refine
 			return 1;
 		}
-	} else if (q2_index == -1 && q1_match) { // "black" match on 1st input, but not 2nd
-		if (quadrant->p.user_int == -1) { // in "subtree" case
-			quadrant->p.user_int = 1;
+	} else if (q2_index == -1 && q1_match) { // "marked" match on 1st input, only
+		if (quadrant->p.user_int == GRAY) { // in "subtree" case; done
+			quadrant->p.user_int = MARKED;
 			return 0;
-		} else { // entering "subtree" case; refine further
+		} else { // entering "subtree" case; refine
 			return -1;
 		}
 	} else { // match in 2nd input tree
 		q2 = p4est_quadrant_array_index(quads2, q2_index);
-		if (!q2->p.user_int) { // quadrant is "white"; we're done
-			quadrant->p.user_int = 0;
+		if (!q2->p.user_int) { // quadrant is "unmarked"; we're done
+			quadrant->p.user_int = UNMARKED;
 			return 0;
-		} else if (q2->p.user_int && q1_match) { // corresponding matches in both inputs, so this quadrant is "black"
-			quadrant->p.user_int = 1;
+		} else if (q2->p.user_int && q1_match) { // corresponding matches in both inputs, so this quadrant is "marked"
+			quadrant->p.user_int = MARKED;
 			return 0;
-		} else if (q2->p.user_int && !q1_match) { // no match in 1st input; matched "black" in 2nd
-			if (quadrant->p.user_int == -1) { // in "subtree" case
-				quadrant->p.user_int = 1;
+		} else if (q2->p.user_int && !q1_match) { // no match in 1st input; matched "marked" in 2nd
+			if (quadrant->p.user_int == GRAY) { // in "subtree" case
+				quadrant->p.user_int = MARKED;
 				return 0;
-			} else { // entering "subtree" case; refine further
+			} else { // entering "subtree" case; refine
 				return -1;
 			}
-		} else {
+		} else { // shouldn't enter this clause
 			printf("Unexpected case triggered in p4est_intersection_refine_fn\n");
 			return 0;
 		}
@@ -811,7 +831,14 @@ p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_ou
 	return p4est_out;
 }
 
-// main logic
+/**
+ * Base logic for p4est_union and p4est_intersection.
+ *
+ * Note: most of this body of code is copied over from p4est_refine.
+ * The main changes are a different callback function, as well as logic
+ * for setting user_int of new children quadrants. A lot of it is NOT
+ * necessary for the simple single-tree, single-process case case.
+ */
 void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p4est_setop_refine_t setop_refine_fn)
 {
 #ifdef P4EST_ENABLE_DEBUG

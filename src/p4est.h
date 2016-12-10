@@ -336,19 +336,44 @@ void                p4est_refine (p4est_t * p4est,
                                   p4est_refine_t refine_fn,
                                   p4est_init_t init_fn);
 
-// test
+/** Refinement callback function for union
+ * \param [in] p4est_in1 First input forest
+ * \param [in] p4est_in2 Second input forest
+ * \param [in,out] p4est Union forest
+ */
 int p4est_union_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
                                        p4est_topidx_t which_tree,
                                        p4est_quadrant_t *quadrant);
 
+/** Refinement callback function for intersection
+ * \param [in] p4est_in1 First input forest
+ * \param [in] p4est_in2 Second input forest
+ * \param [in,out] p4est Intersection forest
+ */
 int p4est_intersection_refine_fn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
                                        p4est_topidx_t which_tree,
                                        p4est_quadrant_t *quadrant);
 
+/** Refines a forest into the union of two input forests.
+ * \param [in] p4est1 First input forest
+ * \param [in] p4est2 Second input forest
+ * \param [in,out] p4est_out Union forest
+ */
 p4est_t *p4est_union (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out);
 
+/** Refines a forest into the union of two input forests.
+ * \param [in] p4est1 First input forest
+ * \param [in] p4est2 Second input forest
+ * \param [in,out] p4est_out Intersection forest
+ */
 p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out);
 
+/** Base implementation for union and intersection set operations
+ * \param [in] p4est1 First input forest
+ * \param [in] p4est2 Second input forest
+ * \param [in,out] p4est_out Intersection forest
+ * \param setop_refine_fn Callback function (either for union or intersection)
+ */
 void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p4est_setop_refine_t setop_refine_fn);
 
 /** Coarsen a forest.
