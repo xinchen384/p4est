@@ -220,6 +220,10 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
   p4est_quadrant_t   *global_first_position;
   sc_array_t         *tquadrants;
 
+  //xin
+  struct timeval t1, t2, t3, t4, t5;
+  double elapsedTime;
+
   P4EST_GLOBAL_PRODUCTIONF
     ("Into " P4EST_STRING
      "_new with min quadrants %lld level %d uniform %d\n",
@@ -241,6 +245,7 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
   num_procs = p4est->mpisize;
   rank = p4est->mpirank;
 
+
   /* allocate memory pools */
   if (p4est->data_size > 0) {
     p4est->user_data_pool = sc_mempool_new (p4est->data_size);
@@ -248,7 +253,10 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
   else {
     p4est->user_data_pool = NULL;
   }
+gettimeofday(&t1, NULL);
   p4est->quadrant_pool = sc_mempool_new (sizeof (p4est_quadrant_t));
+gettimeofday(&t2, NULL);
+
 
   /* determine uniform level of initial tree */
   tree_num_quadrants = 1;
@@ -291,6 +299,9 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
      (long long) first_quadrant);
   P4EST_ASSERT (first_tree_quadrant < tree_num_quadrants);
 
+  printf("first global quadrant index %lld last global quadrant index %lld, num_trees %lld\n",
+     (long long) first_quadrant, (long long) last_quadrant, (long long)num_trees);
+ 
   /* compute index of last tree for this processor */
   if (first_quadrant <= last_quadrant) {
     last_tree = last_quadrant / tree_num_quadrants;
@@ -336,6 +347,8 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
   p4est->local_num_quadrants = 0;
   p4est->global_num_quadrants = 0;
 
+gettimeofday(&t3, NULL);
+  
   /* for every locally non-empty tree fill first and last quadrant */
   P4EST_QUADRANT_INIT (&a);
   P4EST_QUADRANT_INIT (&b);
@@ -449,6 +462,7 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
     }
   }
 
+gettimeofday(&t4, NULL);
   /* compute some member variables */
   p4est->first_local_tree = first_tree;
   p4est->last_local_tree = last_tree;
@@ -466,6 +480,7 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
     p4est->global_num_quadrants = global_num_quadrants;
   }
 
+  
   /* fill in global partition information */
   global_first_position = P4EST_ALLOC_ZERO (p4est_quadrant_t, num_procs + 1);
   for (i = 0; i <= num_procs; ++i) {
@@ -484,9 +499,30 @@ p4est_new_ext (sc_MPI_Comm mpicomm, p4est_connectivity_t * connectivity,
   }
   p4est->global_first_position = global_first_position;
 
+gettimeofday(&t5, NULL);
+
   /* print more statistics */
   P4EST_VERBOSEF ("total local quadrants %lld\n",
                   (long long) p4est->local_num_quadrants);
+
+  elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+  elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+  printf(" allocate p4est trees mem elapsedTime %f  ms.\n", elapsedTime);
+
+  elapsedTime = (t3.tv_sec - t2.tv_sec) * 1000.0;      // sec to ms
+  elapsedTime += (t3.tv_usec - t2.tv_usec) / 1000.0;   // us to ms
+  printf(" initialize global trees elapsedTime %f  ms.\n", elapsedTime);
+
+  printf( "total local quadrants %lld on mpi rank %d memsize %ld",
+                  (long long) p4est->local_num_quadrants, rank, (long int)(sizeof (p4est_quadrant_t)));
+
+  elapsedTime = (t4.tv_sec - t3.tv_sec) * 1000.0;      // sec to ms
+  elapsedTime += (t4.tv_usec - t3.tv_usec) / 1000.0;   // us to ms
+  printf(" local trees elapsedTime %f  ms.\n", elapsedTime);
+
+  elapsedTime = (t5.tv_sec - t4.tv_sec) * 1000.0;      // sec to ms
+  elapsedTime += (t5.tv_usec - t4.tv_usec) / 1000.0;   // us to ms
+  printf(" fill in global partition elapsedTime %f  ms.\n", elapsedTime);
 
   P4EST_ASSERT (p4est->revision == 0);
   P4EST_ASSERT (p4est_is_valid (p4est));
@@ -831,6 +867,14 @@ p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_ou
 	return p4est_out;
 }
 
+p4est_t *p4est_diff (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p4est_setop_refine_t refine_fn, p4est_coarsen_t coarsen_fn)
+{
+        p4est_set_operation(p4est1, p4est2, p4est_out, refine_fn);
+        //p4est_set_operation(p4est1, p4est2, p4est_out, p4est_diff_refine_fn);
+        //p4est_coarsen_ext(p4est_out, 1, 0, coarsen_fn, NULL, NULL);
+        return p4est_out;
+}
+
 /**
  * Base logic for p4est_union and p4est_intersection.
  *
@@ -864,6 +908,8 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
   p4est_replace_t replace_fn = NULL;
   p4est_init_t init_fn = NULL;
   int refine_recursive = 1;
+
+  int tilelen, unit_len;
 
   P4EST_GLOBAL_PRODUCTIONF ("Into " P4EST_STRING
                             "_set_operation with %lld total quadrants,"
@@ -923,6 +969,7 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
       maxlevel = SC_MAX (maxlevel, (int) q->level);
       ++tree->quadrants_per_level[q->level];
     }
+    //printf("found the first quadrant !!!!\n");
     if (current == incount) {
       /* no refinement occurs in this tree */
     	p4est_out->local_num_quadrants += incount;
@@ -986,32 +1033,58 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
         p4est_quadrant_init_data (p4est_out, nt, c2, init_fn);
         p4est_quadrant_init_data (p4est_out, nt, c3, init_fn);
         c0->pad8 = c1->pad8 = c2->pad8 = c3->pad8 = 1;
-
-        // mark "subtree" case in future children to be refined
-        if (refine_flag == -1) {
-        	c0->p.user_int = -1;
-        	c1->p.user_int = -1;
-        	c2->p.user_int = -1;
-        	c3->p.user_int = -1;
-        }
-        // ignoring corresponding 3D case for now
-
 #ifdef P4_TO_P8
         p4est_quadrant_init_data (p4est_out, nt, c4, init_fn);
         p4est_quadrant_init_data (p4est_out, nt, c5, init_fn);
         p4est_quadrant_init_data (p4est_out, nt, c6, init_fn);
         p4est_quadrant_init_data (p4est_out, nt, c7, init_fn);
         c4->pad8 = c5->pad8 = c6->pad8 = c7->pad8 = 1;
+#endif
+        // mark "subtree" case in future children to be refined
+        if (refine_flag == -1) {
+        	c0->p.user_int = -1;
+        	c1->p.user_int = -1;
+        	c2->p.user_int = -1;
+        	c3->p.user_int = -1;
+#ifdef P4_TO_P8
+                c4->p.user_int = -1;
+                c5->p.user_int = -1;
+                c6->p.user_int = -1;
+                c7->p.user_int = -1;
+        /*
+        tilelen = 1 << (3 - c0->level);
+        unit_len = P4EST_QUADRANT_LEN (3);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c0->x/unit_len, c0->y/unit_len, c0->z/unit_len, c0->level, tilelen, c0->p.user_int);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c1->x/unit_len, c1->y/unit_len, c1->z/unit_len, c1->level, tilelen, c1->p.user_int);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c2->x/unit_len, c2->y/unit_len, c2->z/unit_len, c2->level, tilelen, c2->p.user_int);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c3->x/unit_len, c3->y/unit_len, c3->z/unit_len, c3->level, tilelen, c3->p.user_int);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c4->x/unit_len, c4->y/unit_len, c4->z/unit_len, c4->level, tilelen, c4->p.user_int);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c5->x/unit_len, c5->y/unit_len, c5->z/unit_len, c5->level, tilelen, c5->p.user_int);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c6->x/unit_len, c6->y/unit_len, c6->z/unit_len, c6->level, tilelen, c6->p.user_int);
+        printf ("@@@ (x: %d y: %d z: %d) level %d tilelen: %d data: %d\n ", 
+              c7->x/unit_len, c7->y/unit_len, c7->z/unit_len, c7->level, tilelen, c7->p.user_int);
+        printf(" ################## %d: (%d, %d, %d)\n", P4EST_ROOT_LEN, c7->x, c7->y, c7->z);
+        */
+#endif
+        }
 
+        (void) sc_list_prepend (list, c3);
+        (void) sc_list_prepend (list, c2);
+        (void) sc_list_prepend (list, c1);
+        (void) sc_list_prepend (list, c0);
+#ifdef P4_TO_P8
         (void) sc_list_prepend (list, c7);
         (void) sc_list_prepend (list, c6);
         (void) sc_list_prepend (list, c5);
         (void) sc_list_prepend (list, c4);
 #endif
-        (void) sc_list_prepend (list, c3);
-        (void) sc_list_prepend (list, c2);
-        (void) sc_list_prepend (list, c1);
-        (void) sc_list_prepend (list, c0);
 
         if (replace_fn != NULL) {
           /* in family mode we always call the replace callback right
@@ -1093,6 +1166,140 @@ void p4est_set_operation(p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p
   P4EST_GLOBAL_PRODUCTIONF ("Done " P4EST_STRING
                             "_set_operation with %lld total quadrants\n",
                             (long long) p4est_out->global_num_quadrants);
+}
+
+void
+p4est_remove(p4est_t * p4est)
+{
+
+  int                 i, maxlevel;
+  size_t              zz, ztop, znext;
+  size_t              incount, removed;
+  size_t              length;
+  p4est_locidx_t      num_quadrants, prev_offset;
+  p4est_topidx_t      jt;
+  p4est_tree_t       *tree;
+  sc_array_t         *tquadrants;
+  p4est_gloidx_t      old_gnq;
+  p4est_quadrant_t   *cfirst, *clast;
+  p4est_quadrant_t    *mtemp, *cur;
+  //p4est_qcoord_t      unit_len;
+  //int                 offsi, offsj;
+
+  P4EST_GLOBAL_PRODUCTIONF ("Into " P4EST_STRING
+                            "_remove with %lld total quadrants\n",
+                            (long long) p4est->global_num_quadrants);
+
+        old_gnq = p4est->global_num_quadrants;
+        prev_offset = 0;
+        removed = 0;
+        for (jt = p4est->first_local_tree; jt <= p4est->last_local_tree; ++jt) {
+          tree = p4est_tree_array_index (p4est->trees, jt);
+          tquadrants = &tree->quadrants;
+          incount = tquadrants->elem_count;
+          length = 0;                 /* length of hole in window/array */
+
+          cfirst = p4est_quadrant_array_index (tquadrants, 0);
+          clast = p4est_quadrant_array_index (tquadrants, incount-1);
+          ztop = 0;
+          for (zz = 0; zz < incount; ++zz){
+            cur = p4est_quadrant_array_index (tquadrants, zz);
+            mtemp = p4est_quadrant_array_index (tquadrants, ztop);
+            //unit_len = P4EST_QUADRANT_LEN (3);
+            //offsi = (cur->x)/unit_len ;       /* Pixel x offset */
+            //offsj = (cur->y)/unit_len;
+            if (zz != ztop){
+              *mtemp = *cur;
+            }
+
+if (cur->p.user_int != 1){
+              p4est_quadrant_free_data (p4est, cur);
+              tree->quadrants_per_level[cur->level] -= 1;
+              p4est->local_num_quadrants--;
+              length++;
+              removed++;
+              // move it left
+            } else {
+              ztop++;
+            }
+          }
+          if (length > 0){
+            sc_array_resize (tquadrants, incount-length);
+          }
+          //p4est_quadrant_free_data (p4est, cfirst);
+          //p4est_quadrant_free_data (p4est, clast);
+          //tree->quadrants_per_level[cfirst->level] -= 1;
+          //tree->quadrants_per_level[clast->level] -= 1;
+          //p4est->local_num_quadrants -= 2;
+          //removed += 2;
+          /*
+          for (zz = 0; zz < incount; ++zz){ 
+            mtemp = p4est_quadrant_array_index (tquadrants, zz);
+#ifdef P4_TO_P8
+            printf(" !!!!!!!  coordinates is: (%d, %d, %d) \n ", mtemp->x, mtemp->y, mtemp->z);
+#else
+            printf(" !!!!!!!  coordinates is: (%d, %d) \n ", mtemp->x, mtemp->y);
+#endif
+          }
+          // only move left by one offset
+          length = 1;
+          if (length > 0) {
+            for (zz = length; zz < incount; ++zz) {
+              cfirst = p4est_quadrant_array_index (tquadrants, zz - length);
+              clast = p4est_quadrant_array_index (tquadrants, zz);
+              *cfirst = *clast;
+            }
+            sc_array_resize (tquadrants, incount - length-1);
+          }
+          */
+
+/* compute maximum level */
+          maxlevel = 0;
+          num_quadrants = 0;
+          for (i = 0; i <= P4EST_QMAXLEVEL; ++i) {
+            P4EST_ASSERT (tree->quadrants_per_level[i] >= 0);
+            num_quadrants += tree->quadrants_per_level[i];    /* same type */
+            if (tree->quadrants_per_level[i] > 0) {
+              maxlevel = i;
+            }
+          }
+          tree->maxlevel = (int8_t) maxlevel;
+          tree->quadrants_offset = prev_offset;
+          prev_offset += num_quadrants;
+
+          P4EST_ASSERT (num_quadrants == (p4est_locidx_t) tquadrants->elem_count);
+          P4EST_ASSERT (tquadrants->elem_count == incount - removed);
+          if (p4est->user_data_pool != NULL) {
+            P4EST_ASSERT (data_pool_size - removed ==
+                          p4est->user_data_pool->elem_count);
+          }
+          P4EST_ASSERT (p4est_tree_is_sorted (tree));
+          P4EST_ASSERT (p4est_tree_is_complete (tree));
+
+          /* final log message for this tree */
+          printf ("Done coarsen remove tree id: %lld now with ele count: %llu\n", (long long) jt,
+                    (unsigned long long) tquadrants->elem_count);
+
+        }
+        // finish all trees
+
+        if (p4est->last_local_tree >= 0) {
+          for (; jt < p4est->connectivity->num_trees; ++jt) {
+            tree = p4est_tree_array_index (p4est->trees, jt);
+            tree->quadrants_offset = p4est->local_num_quadrants;
+          }
+        }
+        /* compute global number of quadrants */
+        p4est_comm_count_quadrants (p4est);
+        P4EST_ASSERT (p4est->global_num_quadrants <= old_gnq);
+        if (old_gnq != p4est->global_num_quadrants) {
+          ++p4est->revision;
+        }
+        P4EST_ASSERT (p4est_is_valid (p4est));
+
+ P4EST_GLOBAL_PRODUCTIONF ("Done " P4EST_STRING
+                            "_remove left with %lld total quadrants\n",
+                            (long long) p4est->global_num_quadrants);
 }
 
 void

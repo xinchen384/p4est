@@ -4250,6 +4250,8 @@ p4est_connectivity_read_inp_stream (FILE * stream,
   p4est_topidx_t      num_elements = 0;
   int                 fill_trees_and_vertices = (vertices != NULL &&
                                                  tree_to_vertex != NULL);
+  long long int element_start = -1;
+  int start = 0;
 
   P4EST_ASSERT ((vertices == NULL && tree_to_vertex == NULL) ||
                 (vertices != NULL && tree_to_vertex != NULL));
@@ -4344,11 +4346,24 @@ p4est_connectivity_read_inp_stream (FILE * stream,
           return 1;
         }
 
+        //xin 
+        if (start == 0){
+          element_start = element_number;
+          start = 1;
+          printf(" *** first element id: %lld\n", element_start);
+          //printf(" *** line content: %s", line);
+          element_number = element_number-element_start+1;
+          printf(" *** line content: %s id %lld num %lld\n", line, (long long int)element_number, (long long int)(*num_trees));
+        } else{
+          element_number = element_number-element_start+1;
         if (element_number > *num_trees) {
           P4EST_LERROR ("Encountered element that will not fit into"
                         " tree_to_vertex array. More elements than expected.\n");
+          printf(" line content: %s start_id %lld element_number %lld, #tree %lld\n", line, 
+            element_start, (long long int)element_number, (long long int)(*num_trees));
           P4EST_FREE (line);
           return 1;
+        }
         }
 
         for (n = 0; n < P4EST_CHILDREN; ++n)
@@ -4400,6 +4415,7 @@ p4est_connectivity_read_inp (const char *filename)
   }
 
   rewind (fid);
+  printf (" xxx finish passing 1, #nodes %lld and #elements %lld \n", (long long int)num_vertices, (long long int)num_trees);
 
   conn = p4est_connectivity_new (num_vertices, num_trees,
 #ifdef P4_TO_P8
