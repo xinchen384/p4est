@@ -167,6 +167,8 @@
 #define p4est_intersection_refine_fn	p8est_intersection_refine_fn
 #define p4est_union						p8est_union
 #define p4est_intersection				p8est_intersection
+#define p4est_diff					p8est_diff
+#define p4est_remove					p8est_remove
 #define p4est_set_operation				p8est_set_operation
 #define p4est_balance                   p8est_balance
 #define p4est_partition                 p8est_partition

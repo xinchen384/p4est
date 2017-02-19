@@ -22,7 +22,7 @@
 
 /* C compiler */
 #ifndef P4EST_CC
-#define P4EST_CC "gcc"
+#define P4EST_CC "mpicc"
 #endif
 
 /* C compiler flags */
@@ -32,7 +32,7 @@
 
 /* C preprocessor */
 #ifndef P4EST_CPP
-#define P4EST_CPP "gcc -E"
+#define P4EST_CPP "mpicc -E"
 #endif
 
 /* C preprocessor flags */
@@ -44,9 +44,7 @@
 /* #undef CXX_NO_MINUS_C_MINUS_O */
 
 /* DEPRECATED (use P4EST_ENABLE_DEBUG instead) */
-#ifndef P4EST_DEBUG
-#define P4EST_DEBUG 1
-#endif
+/* #undef DEBUG */
 
 /* Undefine if: disable the 2D library */
 #ifndef P4EST_ENABLE_BUILD_2D
@@ -64,9 +62,7 @@
 #endif
 
 /* enable debug mode (assertions and extra checks) */
-#ifndef P4EST_ENABLE_DEBUG
-#define P4EST_ENABLE_DEBUG 1
-#endif
+/* #undef ENABLE_DEBUG */
 
 /* Undefine if: use aligned malloc (optionally use --enable-memalign=<bytes>)
    */
@@ -75,19 +71,29 @@
 #endif
 
 /* Define to 1 if we are using MPI */
-/* #undef ENABLE_MPI */
+#ifndef P4EST_ENABLE_MPI
+#define P4EST_ENABLE_MPI 1
+#endif
 
 /* Define to 1 if we can use MPI_COMM_TYPE_SHARED */
-/* #undef ENABLE_MPICOMMSHARED */
+#ifndef P4EST_ENABLE_MPICOMMSHARED
+#define P4EST_ENABLE_MPICOMMSHARED 1
+#endif
 
 /* Define to 1 if we are using MPI I/O */
-/* #undef ENABLE_MPIIO */
+#ifndef P4EST_ENABLE_MPIIO
+#define P4EST_ENABLE_MPIIO 1
+#endif
 
 /* Define to 1 if we are using MPI_Init_thread */
-/* #undef ENABLE_MPITHREAD */
+#ifndef P4EST_ENABLE_MPITHREAD
+#define P4EST_ENABLE_MPITHREAD 1
+#endif
 
 /* Define to 1 if we can use MPI_Win_allocate_shared */
-/* #undef ENABLE_MPIWINSHARED */
+#ifndef P4EST_ENABLE_MPIWINSHARED
+#define P4EST_ENABLE_MPIWINSHARED 1
+#endif
 
 /* enable OpenMP (optionally use --enable-openmp=<OPENMP_CFLAGS>) */
 /* #undef ENABLE_OPENMP */
@@ -189,7 +195,9 @@
 #endif
 
 /* Have we found function omp_get_thread_num. */
-/* #undef HAVE_OPENMP */
+#ifndef P4EST_HAVE_OPENMP
+#define P4EST_HAVE_OPENMP 1
+#endif
 
 /* Define to 1 if you have the `posix_memalign' function. */
 #ifndef P4EST_HAVE_POSIX_MEMALIGN
@@ -243,7 +251,7 @@
 
 /* Libraries */
 #ifndef P4EST_LIBS
-#define P4EST_LIBS "-llapack -lblas -lz   "
+#define P4EST_LIBS "-lgomp  /mnt/xin/lib/blas/lib/libopenblas.a -lz   "
 #endif
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
@@ -265,10 +273,14 @@
 /* #undef METIS */
 
 /* DEPRECATED (use P4EST_ENABLE_MPI instead) */
-/* #undef MPI */
+#ifndef P4EST_MPI
+#define P4EST_MPI 1
+#endif
 
 /* DEPRECATED (use P4EST_ENABLE_MPIIO instead) */
-/* #undef MPIIO */
+#ifndef P4EST_MPIIO
+#define P4EST_MPIIO 1
+#endif
 
 /* Define to 1 if your C compiler doesn't accept -c and -o together. */
 /* #undef NO_MINUS_C_MINUS_O */
@@ -293,7 +305,7 @@
 
 /* Define to the full name and version of this package. */
 #ifndef P4EST_PACKAGE_STRING
-#define P4EST_PACKAGE_STRING "p4est 1.1.397-0e7e"
+#define P4EST_PACKAGE_STRING "p4est 1.1.414-cabb-dirty"
 #endif
 
 /* Define to the one symbol short name of this package. */
@@ -308,7 +320,7 @@
 
 /* Define to the version of this package. */
 #ifndef P4EST_PACKAGE_VERSION
-#define P4EST_PACKAGE_VERSION "1.1.397-0e7e"
+#define P4EST_PACKAGE_VERSION "1.1.414-cabb-dirty"
 #endif
 
 /* DEPRECATED (use P4EST_WITH_PETSC instead) */
@@ -318,9 +330,7 @@
 /* #undef PROVIDE_GETOPT */
 
 /* Use builtin obstack */
-#ifndef P4EST_PROVIDE_OBSTACK
-#define P4EST_PROVIDE_OBSTACK 1
-#endif
+/* #undef PROVIDE_OBSTACK */
 
 /* DEPRECATED (use P4EST_ENABLE_PTHREAD instead) */
 /* #undef PTHREAD */
@@ -340,7 +350,7 @@
 
 /* Version number of package */
 #ifndef P4EST_VERSION
-#define P4EST_VERSION "1.1.397-0e7e"
+#define P4EST_VERSION "1.1.414-cabb-dirty"
 #endif
 
 /* Package major version */
@@ -355,7 +365,7 @@
 
 /* Package point version */
 #ifndef P4EST_VERSION_POINT
-#define P4EST_VERSION_POINT 397-0e7e
+#define P4EST_VERSION_POINT 414-cabb-dirty
 #endif
 
 /* DEPRECATED (use P4EST_ENABLE_VTK_BINARY instead) */

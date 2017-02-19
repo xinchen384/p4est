@@ -368,6 +368,10 @@ p4est_t *p4est_union (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out);
  */
 p4est_t *p4est_intersection (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out);
 
+p4est_t *p4est_diff (p4est_t *p4est1, p4est_t *p4est2, p4est_t *p4est_out, p4est_setop_refine_t refine_fn, p4est_coarsen_t coarsen_fn);
+
+void p4est_remove(p4est_t * p4est);
+
 /** Base implementation for union and intersection set operations
  * \param [in] p4est1 First input forest
  * \param [in] p4est2 Second input forest
