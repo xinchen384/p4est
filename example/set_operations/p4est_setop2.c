@@ -129,6 +129,7 @@ int main (int argc, char **argv)
 	sc_MPI_Comm         mpicomm;
 	p4est_t            *p4est_h, *p4est_v, *p4est_u, *p4est_i;
 	p4est_connectivity_t *conn_h, *conn_v, *conn_u, *conn_i;
+        int si ;
 
 	/* Initialize MPI; "dummy" in single-process case */
 	mpiret = sc_MPI_Init (&argc, &argv);
@@ -157,7 +158,7 @@ int main (int argc, char **argv)
 	p4est_tree_t *tree = p4est_tree_array_index (p4est_u->trees, 0); // we only need 1 tree for simple examples
 	sc_array_t *quadrants = &(tree->quadrants);
 	int n_quads = quadrants->elem_count;
-	for (int si = 0; si < n_quads; si++) {
+	for ( si = 0; si < n_quads; si++) {
 		p4est_quadrant_t *q = p4est_quadrant_array_index(quadrants, si);
 		int value = q->p.user_int;
 		if (value > 0) {
@@ -173,7 +174,7 @@ int main (int argc, char **argv)
 	tree = p4est_tree_array_index (p4est_i->trees, 0);
 	quadrants = &(tree->quadrants);
 	n_quads = quadrants->elem_count;
-	for (int si = 0; si < n_quads; si++) {
+	for (si = 0; si < n_quads; si++) {
 		p4est_quadrant_t *q = p4est_quadrant_array_index(quadrants, si);
 		int value = q->p.user_int;
 		if (value > 0) {

@@ -344,7 +344,7 @@ main (int argc, char **argv)
                              0, min_level, 1, 0, NULL, NULL);
   
   p4est2 = p4est_copy(p4est1, 1); 
-  //p4est_out = p4est_copy(p4est1, 1); 
+  p4est_out = p4est_copy(p4est1, 1); 
 
   max_ranges = -1;
   p4est1->inspect = P4EST_ALLOC_ZERO (p4est_inspect_t, 1);
@@ -374,13 +374,13 @@ main (int argc, char **argv)
 gettimeofday(&t1, NULL);
   //p4est_intersection(p4est1, p4est2, p4est_out);
   //p4est_union(p4est1, p4est2, p4est_out);
-  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn, coarsen_fn);
+  p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn, coarsen_fn);
 gettimeofday(&t2, NULL);
 
 
-  //p4est_remove(p4est1);
-  //p4est_remove(p4est_out);
-  //p4est_remove(p4est2);
+  p4est_remove(p4est1);
+  p4est_remove(p4est2);
+  p4est_remove(p4est_out);
   //sc_stats_set1 (&stats[TIMINGS_REFINE], snapshot.iwtime, "Refine");
   printf("finish operations here !!!\n");
 
@@ -388,9 +388,7 @@ gettimeofday(&t2, NULL);
   //p4est_vtk_write_file (p4est1, NULL, "tree1_teapot");
   p4est_vtk_write_file (p4est1, NULL, "tree_teapot");
   p4est_vtk_write_file (p4est2, NULL, "tree_head");
-
-  //p4est_vtk_write_file (p4est2, NULL, "tree2_refined");
-  //p4est_vtk_write_file (p4est_out, NULL, "diff_refined");
+  p4est_vtk_write_file (p4est_out, NULL, "tree_intersect");
 #endif
   count_refined = p4est1->global_num_quadrants;
 
@@ -415,7 +413,7 @@ gettimeofday(&t2, NULL);
   P4EST_FREE (p4est1->inspect);
   p4est_destroy (p4est1);
   p4est_destroy (p4est2);
-  //p4est_destroy (p4est_out);
+  p4est_destroy (p4est_out);
   
   p4est_connectivity_destroy (connectivity);
 
