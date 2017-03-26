@@ -7,10 +7,10 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/xin/Desktop/scalable/git/install/l
 #gcc -c -o api.o api.c -I /home/xin/Desktop/scalable/p4est/install/include/ -I /usr/include/mpi/ 
 #gcc -c -o cube.o cube.c  -I /home/xin/Desktop/scalable/p4est/install/include/ -I /usr/include/mpi/ 
 
-gcc -c -o cube3.o cube3.c  -I /mnt/xin/install-mpi/include/ -I /home/xin/Desktop/scalable/git/install/include
+gcc -c -o cube3.o cube3.c  -I /mnt/xin/install-mpi/include/ -I /usr/include/mpi/ -I /home/xin/Desktop/scalable/git/install/include
 gcc -o cube3d cube3.o -L /home/xin/Desktop/scalable/git/install/lib/ -L /mnt/xin/install-mpi/lib/ -lp4est -lmpi -lsc  
 
-gcc -c -o volume.o volume.c  -I /mnt/xin/install-mpi/include/ -I /home/xin/Desktop/scalable/git/install/include
+gcc -c -o volume.o volume.c  -I /mnt/xin/install-mpi/include/ -I /usr/include/mpi/ -I /home/xin/Desktop/scalable/git/install/include
 gcc -o volume volume.o -L /home/xin/Desktop/scalable/git/install/lib/ -L /mnt/xin/install-mpi/lib/ -lp4est -lmpi -lsc  
 
 

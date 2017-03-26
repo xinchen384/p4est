@@ -1,6 +1,7 @@
 example/tetgen/write_conn2.o: example/tetgen/write_conn2.c \
  /usr/include/stdc-predef.h src/p4est_connectivity.h sc/src/sc_io.h \
- sc/src/sc.h sc/src/sc_config.h /usr/include/math.h \
+ sc/src/sc.h sc/src/sc_config.h /usr/include/mpich/mpi.h \
+ /usr/include/mpich/mpio.h /usr/include/mpich/mpi.h /usr/include/math.h \
  /usr/include/features.h /usr/include/x86_64-linux-gnu/sys/cdefs.h \
  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
@@ -66,6 +67,12 @@ sc/src/sc_io.h:
 sc/src/sc.h:
 
 sc/src/sc_config.h:
+
+/usr/include/mpich/mpi.h:
+
+/usr/include/mpich/mpio.h:
+
+/usr/include/mpich/mpi.h:
 
 /usr/include/math.h:
 

@@ -154,7 +154,9 @@
 /* #undef FC_NO_MINUS_C_MINUS_O */
 
 /* Define to 1 if you have the `aligned_alloc' function. */
-/* #undef HAVE_ALIGNED_ALLOC */
+#ifndef P4EST_HAVE_ALIGNED_ALLOC
+#define P4EST_HAVE_ALIGNED_ALLOC 1
+#endif
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #ifndef P4EST_HAVE_ARPA_INET_H
@@ -251,7 +253,7 @@
 
 /* Libraries */
 #ifndef P4EST_LIBS
-#define P4EST_LIBS "-lgomp  /mnt/xin/lib/blas/lib/libopenblas.a -lz   "
+#define P4EST_LIBS "-lgomp -llapack -lblas -lz -lm   "
 #endif
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
@@ -305,7 +307,7 @@
 
 /* Define to the full name and version of this package. */
 #ifndef P4EST_PACKAGE_STRING
-#define P4EST_PACKAGE_STRING "p4est 1.1.414-cabb-dirty"
+#define P4EST_PACKAGE_STRING "p4est UNKNOWN-dirty"
 #endif
 
 /* Define to the one symbol short name of this package. */
@@ -320,7 +322,7 @@
 
 /* Define to the version of this package. */
 #ifndef P4EST_PACKAGE_VERSION
-#define P4EST_PACKAGE_VERSION "1.1.414-cabb-dirty"
+#define P4EST_PACKAGE_VERSION "UNKNOWN-dirty"
 #endif
 
 /* DEPRECATED (use P4EST_WITH_PETSC instead) */
@@ -350,22 +352,22 @@
 
 /* Version number of package */
 #ifndef P4EST_VERSION
-#define P4EST_VERSION "1.1.414-cabb-dirty"
+#define P4EST_VERSION "UNKNOWN-dirty"
 #endif
 
 /* Package major version */
 #ifndef P4EST_VERSION_MAJOR
-#define P4EST_VERSION_MAJOR 1
+#define P4EST_VERSION_MAJOR UNKNOWN-dirty
 #endif
 
 /* Package minor version */
 #ifndef P4EST_VERSION_MINOR
-#define P4EST_VERSION_MINOR 1
+#define P4EST_VERSION_MINOR y
 #endif
 
 /* Package point version */
 #ifndef P4EST_VERSION_POINT
-#define P4EST_VERSION_POINT 414-cabb-dirty
+#define P4EST_VERSION_POINT 
 #endif
 
 /* DEPRECATED (use P4EST_ENABLE_VTK_BINARY instead) */

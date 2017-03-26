@@ -65,8 +65,30 @@
 #include <sc_statistics.h>
 #include <sc_options.h>
 
-#include "api.h"
 #include <sys/time.h>
+
+#define P4EST_TIMINGS_VTK 
+
+#define P4EST_REFINE_LEVEL 8 
+/** The dimension of the image data. */
+#define P4EST_REFINE_LENGTH (1 << P4EST_REFINE_LEVEL)
+static const int          refine_level = P4EST_REFINE_LEVEL;
+static const int          level_shift = 2;
+static const int          min_level = 2;
+static const int          plen = P4EST_REFINE_LENGTH;
+
+static const p4est_qcoord_t eighth = P4EST_QUADRANT_LEN (3);
+static const p4est_qcoord_t center = P4EST_REFINE_LENGTH/2;
+static const p4est_qcoord_t center_z = P4EST_REFINE_LENGTH;
+static const p4est_qcoord_t radix1 = P4EST_REFINE_LENGTH/4;
+static const p4est_qcoord_t radix2 = P4EST_REFINE_LENGTH*3/8;
+
+static const p4est_qcoord_t p1 = P4EST_REFINE_LENGTH/4;
+static const p4est_qcoord_t p2 = P4EST_REFINE_LENGTH*3/4;
+static const int UNMARKED = 0;
+static const int MARKED = 1;
+static const int GRAY = -1;
+
 
 int*** test_array1;
 int*** test_array2;
@@ -99,6 +121,79 @@ refine_fractal (p4est_t * p4est, p4est_topidx_t which_tree,
           || qid == 5 || qid == 6
 #endif
     );
+}
+
+int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
+                                       p4est_topidx_t which_tree,
+                                       p4est_quadrant_t *quadrant)
+{
+        p4est_tree_t *tree1, *tree2;
+        sc_array_t *quads1, *quads2;
+        int q1_index, q2_index;
+        p4est_quadrant_t *q1, *q2;
+        int q1_match = 0;
+        int tilelen, unit_len;
+
+        if ( quadrant->level > refine_level ) return 0;
+
+        tilelen = 1 << (refine_level - quadrant->level);
+        unit_len = P4EST_QUADRANT_LEN (refine_level);
+        //printf ("**** in main set operation x: %d y: %d level %d tilelen: %d \n", quadrant->x/unit_len, quadrant->y/unit_len, quadrant->level, tilelen);
+#ifdef P4_TO_P8
+        //printf ("z: %d \n", quadrant->z/unit_len);
+#endif
+        // 1st input tree
+        tree1 = p4est_tree_array_index(p4est_in1->trees, 0);
+        quads1 = &(tree1->quadrants);
+        q1_index = sc_array_bsearch(quads1, quadrant, p4est_quadrant_compare);
+        if (q1_index != -1) { // quadrant match in 1st input tree
+                //printf("found on in 1st input tree (((())))))\n");
+                q1_match = 1;
+                q1 = p4est_quadrant_array_index(quads1, q1_index);
+                if (!q1->p.user_int) { // quadrant is "unmarked"; we're done
+                        quadrant->p.user_int = UNMARKED;
+                        return 0;
+                }
+        }
+        // 2nd input tree
+        tree2 = p4est_tree_array_index(p4est_in2->trees, 0);
+        quads2 = &(tree2->quadrants);
+        q2_index = sc_array_bsearch(quads2, quadrant, p4est_quadrant_compare);
+        if (q2_index == -1 && !q1_match) { // no match on either input
+                if (quadrant->p.user_int == GRAY) { // "subtree" case; refine
+                        return -1;
+                } else { // no match and NOT a subtree case; refine
+                        return 1;
+                }
+        } else if (q1_match && q2_index == -1) { // "marked" match on 1st input, only
+                if (quadrant->p.user_int == GRAY) { // in "subtree" case; done
+                        quadrant->p.user_int = MARKED;  // tree2 is 0 >> 1 & 0 => 1 
+                        return 0;
+                } else { // entering "subtree" case; refine
+                        printf(" tree1 is marked, but tree2 needs to be refined!!! enter sub tree !!!!!!!\n ");
+                        return -1;
+                }
+        } else { // match in 2nd input tree
+                q2 = p4est_quadrant_array_index(quads2, q2_index);
+                if (q2->p.user_int) { // quadrant is "marked"; we're done
+                        quadrant->p.user_int = UNMARKED;  // * & 1 => 0
+                        return 0;
+                } else if (q1_match && !q2->p.user_int) { // corresponding matches in both inputs, so this quadrant is "marked"
+                        quadrant->p.user_int = MARKED;
+                        return 0;
+                } else if (!q1_match && !q2->p.user_int) { // no match in 1st input; matched "marked" in 2nd
+                        if (quadrant->p.user_int == GRAY) { // in "subtree" case
+                                printf(" tree2 is unmarked, tree1 had been refined!!! \n ");
+                                quadrant->p.user_int = MARKED;
+                                return 0;
+                        } else { // entering "subtree" case; refine
+                                return -1;
+                        }
+                } else { // shouldn't enter this clause
+                        printf("Unexpected case triggered in p4est_diff_refine_fn\n");
+                        return 0;
+                }
+        }
 }
 
 int
@@ -340,9 +435,7 @@ main (int argc, char **argv)
       //connectivity = p8est_connectivity_new_twocubes ();
 #endif
 
-  p4est1 = p4est_new_ext (mpi->mpicomm, connectivity,
-                             0, min_level, 1, 0, NULL, NULL);
-  
+  p4est1 = p4est_new_ext (mpi->mpicomm, connectivity, 0, min_level, 1, 0, NULL, NULL);
   p4est2 = p4est_copy(p4est1, 1); 
   p4est_out = p4est_copy(p4est1, 1); 
 
@@ -373,11 +466,10 @@ main (int argc, char **argv)
 
 gettimeofday(&t1, NULL);
   //p4est_intersection(p4est1, p4est2, p4est_out);
-  //p4est_union(p4est1, p4est2, p4est_out);
-  p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn, coarsen_fn);
+  p4est_union(p4est1, p4est2, p4est_out);
+  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
 gettimeofday(&t2, NULL);
-
-
+  
   p4est_remove(p4est1);
   p4est_remove(p4est2);
   p4est_remove(p4est_out);
@@ -414,13 +506,11 @@ gettimeofday(&t2, NULL);
   p4est_destroy (p4est1);
   p4est_destroy (p4est2);
   p4est_destroy (p4est_out);
-  
   p4est_connectivity_destroy (connectivity);
 
   elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
   elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
   printf(" operation p4est elapsedTime %f  ms.\n", elapsedTime);
-
   /* clean up and exit */
   sc_finalize ();
 

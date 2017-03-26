@@ -5,19 +5,19 @@
 # It is necessary for linking the library.
 
 # The name that we can dlopen(3).
-dlname='libp4est-1.1.397-0e7e.dylib'
+dlname='libp4est-UNKNOWN-dirty.so'
 
 # Names of this library.
-library_names='libp4est-1.1.397-0e7e.dylib libp4est.dylib'
+library_names='libp4est-UNKNOWN-dirty.so libp4est-UNKNOWN-dirty.so libp4est.so'
 
 # The name of the static archive.
 old_library='libp4est.a'
 
 # Linker flags that cannot go in dependency_libs.
-inherited_linker_flags=' '
+inherited_linker_flags=''
 
 # Libraries that this one depends upon.
-dependency_libs=' -llapack -lblas -lz'
+dependency_libs=' -lgomp -llapack -lblas -lz -lm'
 
 # Names of additional weak libraries provided by this library
 weak_library_names=''
@@ -38,4 +38,4 @@ dlopen=''
 dlpreopen=''
 
 # Directory that this library needs to be installed in:
-libdir='/Volumes/data/James/GTResearch/p4est/local/lib'
+libdir='/home/xin/Desktop/scalable/git/install/lib'

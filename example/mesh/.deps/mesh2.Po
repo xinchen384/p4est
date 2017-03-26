@@ -1,6 +1,7 @@
 example/mesh/mesh2.o: example/mesh/mesh2.c /usr/include/stdc-predef.h \
  src/p4est_bits.h src/p4est.h src/p4est_connectivity.h sc/src/sc_io.h \
- sc/src/sc.h sc/src/sc_config.h /usr/include/math.h \
+ sc/src/sc.h sc/src/sc_config.h /usr/include/mpich/mpi.h \
+ /usr/include/mpich/mpio.h /usr/include/mpich/mpi.h /usr/include/math.h \
  /usr/include/features.h /usr/include/x86_64-linux-gnu/sys/cdefs.h \
  /usr/include/x86_64-linux-gnu/bits/wordsize.h \
  /usr/include/x86_64-linux-gnu/gnu/stubs.h \
@@ -72,6 +73,12 @@ sc/src/sc_io.h:
 sc/src/sc.h:
 
 sc/src/sc_config.h:
+
+/usr/include/mpich/mpi.h:
+
+/usr/include/mpich/mpio.h:
+
+/usr/include/mpich/mpi.h:
 
 /usr/include/math.h:
 
