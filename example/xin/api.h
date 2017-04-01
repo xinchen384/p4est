@@ -47,6 +47,7 @@ static const p4est_qcoord_t p2 = P4EST_REFINE_LENGTH*3/4;
 static const int UNMARKED = 0;
 static const int MARKED = 1;
 static const int GRAY = -1;
+static const p4est_qcoord_t offset = P4EST_REFINE_LENGTH/64;
 
 /*
 int

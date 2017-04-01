@@ -67,11 +67,31 @@
 
 #include <sys/time.h>
 
-#include "api.h"
+#define P4EST_TIMINGS_VTK 
+
+#define P4EST_REFINE_LEVEL 8 
+/** The dimension of the image data. */
+#define P4EST_REFINE_LENGTH (1 << P4EST_REFINE_LEVEL)
+static const int          refine_level = P4EST_REFINE_LEVEL;
+static const int          level_shift = 2;
+static const int          min_level = 2;
+static const int          plen = P4EST_REFINE_LENGTH;
+
+static const p4est_qcoord_t eighth = P4EST_QUADRANT_LEN (3);
+static const p4est_qcoord_t center = P4EST_REFINE_LENGTH/2;
+static const p4est_qcoord_t center_z = P4EST_REFINE_LENGTH;
+static const p4est_qcoord_t radix1 = P4EST_REFINE_LENGTH/4;
+static const p4est_qcoord_t radix2 = P4EST_REFINE_LENGTH*3/8;
+
+static const p4est_qcoord_t p1 = P4EST_REFINE_LENGTH/4;
+static const p4est_qcoord_t p2 = P4EST_REFINE_LENGTH*3/4;
+static const int UNMARKED = 0;
+static const int MARKED = 1;
+static const int GRAY = -1;
+
 
 int*** test_array1;
 int*** test_array2;
-int cube_len = -1;
 
 typedef struct
 {
@@ -176,90 +196,6 @@ int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
         }
 }
 
-int valid_id(int x, int y, int z){
-  int res = 0;
-  int full_len = 1 << refine_level;
-  if ( x >= 0 && x < full_len 
-    && y >= 0 && y < full_len
-    && z >= 0 && z < full_len )
-    res = 1;
-  return res;
-}
-
-int
-refine_offset (p4est_t * p4est, p4est_topidx_t which_tree,
-                p4est_quadrant_t * q)
-{
-  int                 qid;
-  int                 tilelen;
-  int                 i, j, k;
-  int                 markedCount;
-  double                 offsi, offsj, offsk;
-  double                 tx, ty, tz, temp;
-  // the voxel that resides in the sphere of tx,ty,taz(offset)
-  double                 px, py, pz;  
-  int ix, iy, iz;
-  int full_len;
-  p4est_qcoord_t      unit_len, current_len;
-
-  if ((int) q->level > refine_level) {
-    return 0;
-  }
-  if ((int) q->level < min_level) {
-    return 1;
-  }
-  full_len = 1 << refine_level;
-  tilelen = 1 << (refine_level - q->level);       /* Pixel size of quadrant */
-  unit_len = P4EST_QUADRANT_LEN (refine_level);
-  current_len = P4EST_QUADRANT_LEN (q->level); 
-  offsi = (double)(q->x) / unit_len + 0.5;       /* Pixel x offset */
-  offsj = (double)(q->y) / unit_len + 0.5;       /* Pixel y offset */
-  offsk = (double)(q->z) / unit_len + 0.5;       /* Pixel z offset */
-  
-  P4EST_ASSERT (offsi >= 0 && offsj >= 0 && offsk >= 0);
-  markedCount = 0; 
-  for (k = 0; k < tilelen; ++k) {
-    for (j = 0; j < tilelen; ++j) {
-      for (i = 0; i < tilelen; ++i) {
-        tx = offsi + i;
-        ty = offsj + j;
-        tz = offsk + k; 
-        for (px = tx - offset; px <= tx + offset; px++)
-        for (py = ty - offset; py <= ty + offset; py++)
-        for (pz = tz - offset; pz <= tz + offset; pz++){
-          ix = (int)(px-0.5);
-          iy = (int)(py-0.5);
-          iz = (int)(pz-0.5);
-          if ( ix >= 0 && ix < full_len 
-               && iy >= 0 && iy < full_len
-               && iz >= 0 && iz < full_len ){
-            if (test_array1[ix][iy][iz] == 1){
-              temp = (tx-px)*(tx-px) + (ty-py)*(ty-py) + (tz-pz)*(tz-pz);
-              if (temp <= offset * offset) markedCount += 1;
-            }
-          }
-          /*
-          */
-        }
-        //ix = (int)(tx-0.5);
-        //iy = (int)(ty-0.5);
-        //iz = (int)(tz-0.5);
-        //if (test_array1[ix][iy][iz] == 1) markedCount += 1;
-      }
-    }
-  }
-  if (!markedCount) {
-          q->p.user_int = UNMARKED;
-          return 0;
-  } else if (tilelen*tilelen*tilelen == 1 && markedCount == 1) {
-          q->p.user_int = MARKED;
-          return 0;
-  } else {
-          return 1;
-  }
-  return 0;
-}
-
 int
 refine_sphere1 (p4est_t * p4est, p4est_topidx_t which_tree,
                 p4est_quadrant_t * q)
@@ -297,7 +233,7 @@ refine_sphere1 (p4est_t * p4est, p4est_topidx_t which_tree,
         ix = (int)(offsi-0.5) + i;
         iy = (int)(offsj-0.5) + j;
         iz = (int)(offsk-0.5) + k;
-        if (test_array1[ix][iy][iz] >= 1){
+        if (test_array1[ix][iy][iz] == 1){
           markedCount += 1;
         }
       }
@@ -391,10 +327,6 @@ int*** read_array(const char *file_name){
   read = getline(&line, &slen, fp);
   len = (int)read - 2;
   test_array = (int***) malloc(len * sizeof(int **));
-  if (cube_len == -1) {
-    cube_len = len;
-    printf( " >>>>> reading bit arrays: %d !!!\n ", cube_len );
-  }
 
   for (i=0; i<len; i++){
     test_array[i] = (int **) malloc ( len* sizeof(int*) );
@@ -417,77 +349,6 @@ int*** read_array(const char *file_name){
   printf ("finish loading the volume file into array!\n");
   return test_array;
 }
-
-void grow_element(int*** data_array, int i, int j, int k, int dis, int len){
-  int min_i, min_j, min_k;
-  int max_i, max_j, max_k;
-  double s1, s2, s3, d1, d2, d3, r;
-  int si, sj, sk;
-  if (dis >= len){
-    printf("the growing distance is much larger than len!!!\n");
-    return;
-  }
-  if ( i<0 || j<0 || k<0 || i>=len || j>=len || k>=len ){
-    printf("index is wrong!!! %d, %d, %d \n", i, j, k);
-    return;
-  }
-  if ( data_array[i][j][k] != 1 ){
-    printf("the element that needs to grow does not contain data !!!\n");
-    return;
-  }
-  d1 = i+0.5;
-  d2 = j+0.5;
-  d3 = k+0.5;
-  r = dis;
-  min_i = i - dis;
-  min_j = j - dis;
-  min_k = k - dis;
-  max_i = i + dis;
-  max_j = j + dis;
-  max_k = k + dis;
-  if (min_i < 0) min_i = 0;
-  if (min_j < 0) min_j = 0;
-  if (min_k < 0) min_k = 0;
-  if (max_i > len-1) max_i = len-1; 
-  if (max_j > len-1) max_j = len-1; 
-  if (max_k > len-1) max_k = len-1; 
-  for (si=min_i; si<=max_i; si++)
-  for (sj=min_j; sj<=max_j; sj++)
-  for (sk=min_k; sk<=max_k; sk++){
-    s1 = (double)si+0.5; 
-    s2 = (double)sj+0.5; 
-    s3 = (double)sk+0.5; 
-    if ( (s1-d1)*(s1-d1) + (s2-d2)*(s2-d2) + (s3-d3)*(s3-d3) <= r*r && 
-          data_array[si][sj][sk] == 0){
-      data_array[si][sj][sk] = 3;
-    } 
-  }
-}
-
-// current version, the distance grows on double sides
-void volume_offset(int*** data_array, int dis, int len){
-  int i, j, k;
-  for (i=0; i<len; i++)
-  for (j=0; j<len; j++)
-  for (k=0; k<len; k++){
-    if (data_array[i][j][k] == 1){
-      grow_element(data_array, i, j, k, dis, len); 
-    }
-  } 
-}
-
-void path_offset(int*** data_array, int dis, int len){
-  int i, j, k;
-  int start_sd = len*9/10;
-  for (i=0; i<len; i++)
-  for (j=0; j<len; j++)
-  for (k=start_sd; k<start_sd+1; k++){
-    if (data_array[i][j][k] == 1){
-      grow_element(data_array, i, j, k, dis, len); 
-    }
-  } 
-}
-
 
 int
 main (int argc, char **argv)
@@ -527,10 +388,10 @@ main (int argc, char **argv)
   struct timeval t1, t2, t3, t4, t5;
   double elapsedTime;
   //*********
-  const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/head-volume";
-  //const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/teapot-volume";
+  const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/teapot-volume";
+  const char *fname2 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/head-volume";
   test_array1 = read_array(fname1);  
-  //test_array2 = read_array(fname2);  
+  test_array2 = read_array(fname2);  
 
   /* initialize MPI and p4est internals */
   mpiret = sc_MPI_Init (&argc, &argv);
@@ -575,8 +436,8 @@ main (int argc, char **argv)
 #endif
 
   p4est1 = p4est_new_ext (mpi->mpicomm, connectivity, 0, min_level, 1, 0, NULL, NULL);
-  //p4est2 = p4est_copy(p4est1, 1); 
-  //p4est_out = p4est_copy(p4est1, 1); 
+  p4est2 = p4est_copy(p4est1, 1); 
+  p4est_out = p4est_copy(p4est1, 1); 
 
   max_ranges = -1;
   p4est1->inspect = P4EST_ALLOC_ZERO (p4est_inspect_t, 1);
@@ -589,52 +450,67 @@ main (int argc, char **argv)
      (overlap && subtree), (overlap && borders));
   quadrant_counts = P4EST_ALLOC (p4est_locidx_t, p4est1->mpisize);
 
-
-  printf("start now ... offset: %d \n", offset);
-
-gettimeofday(&t1, NULL);
-  //volume_offset(test_array1, 5, cube_len); 
-  path_offset(test_array1, 10, cube_len); 
-  //p4est_refine (p4est1, 1, refine_offset, NULL);
-  //p4est_intersection(p4est1, p4est2, p4est_out);
-  //p4est_union(p4est1, p4est2, p4est_out);
-  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
-gettimeofday(&t2, NULL);
-  elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
-  elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
-  printf(" >>>>>>>  operation p4est offset elapsedTime %f  ms.\n", elapsedTime);
-
-
+#ifdef P4EST_TIMINGS_VTK
+  //p4est_vtk_write_file (p4est1, NULL, "tree1_mynew");
+  //p4est_vtk_write_file (p4est2, NULL, "tree2_mynew");
+#endif
 
   /* time refine */
   sc_flops_snap (&fi, &snapshot);
   p4est_refine (p4est1, 1, refine_sphere1, NULL);
-  //p4est_refine (p4est2, 1, refine_sphere2, NULL);
+  p4est_refine (p4est2, 1, refine_sphere2, NULL);
+  //p4est_refine (p4est2, 1, refine_bowl, NULL);
+  //p4est_refine (p4est1, 1, refine_fn1, NULL);
+  //p4est_refine (p4est2, 1, refine_fn2, NULL);
   sc_flops_shot (&fi, &snapshot);
 
- 
+gettimeofday(&t1, NULL);
+  //p4est_intersection(p4est1, p4est2, p4est_out);
+  p4est_union(p4est1, p4est2, p4est_out);
+  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
+gettimeofday(&t2, NULL);
+  
   p4est_remove(p4est1);
-  //p4est_remove(p4est2);
-  //p4est_remove(p4est_out);
+  p4est_remove(p4est2);
+  p4est_remove(p4est_out);
   //sc_stats_set1 (&stats[TIMINGS_REFINE], snapshot.iwtime, "Refine");
-  printf("finish operations here, start writing file !!!\n");
+  printf("finish operations here !!!\n");
 
 #ifdef P4EST_TIMINGS_VTK
   //p4est_vtk_write_file (p4est1, NULL, "tree1_teapot");
-  p4est_vtk_write_file (p4est1, NULL, "tree_head");
-  //p4est_vtk_write_file (p4est2, NULL, "tree_teapot");
-  //p4est_vtk_write_file (p4est_out, NULL, "tree_intersect");
+  p4est_vtk_write_file (p4est1, NULL, "tree_teapot");
+  p4est_vtk_write_file (p4est2, NULL, "tree_head");
+  p4est_vtk_write_file (p4est_out, NULL, "tree_intersect");
 #endif
   count_refined = p4est1->global_num_quadrants;
+
+  //p4est_coarsen (p4est1, 1, coarsen_fn, NULL);
+  //p4est_vtk_write_file (p4est1, NULL, "tree1_coarsed");
+
+  /* time balance */
+  sc_flops_snap (&fi, &snapshot);
+  //p4est_balance (p4est1, P4EST_CONNECT_FULL, NULL);
+  sc_flops_shot (&fi, &snapshot);
+#ifdef P4EST_TIMINGS_VTK
+  //p4est_vtk_write_file (p4est1, NULL, "timings_balanced");
+#endif
+
+  /* calculate and print timings */
+  //sc_stats_compute (mpi->mpicomm, TIMINGS_NUM_STATS, stats);
+  //sc_stats_print (p4est_package_id, SC_LP_STATISTICS,
+  //                TIMINGS_NUM_STATS, stats, 1, 1);
 
   /* destroy the p4est and its connectivity structure */
   P4EST_FREE (quadrant_counts);
   P4EST_FREE (p4est1->inspect);
   p4est_destroy (p4est1);
-  //p4est_destroy (p4est2);
-  //p4est_destroy (p4est_out);
+  p4est_destroy (p4est2);
+  p4est_destroy (p4est_out);
   p4est_connectivity_destroy (connectivity);
 
+  elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+  elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+  printf(" operation p4est elapsedTime %f  ms.\n", elapsedTime);
   /* clean up and exit */
   sc_finalize ();
 

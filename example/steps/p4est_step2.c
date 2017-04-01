@@ -136,7 +136,7 @@ main (int argc, char **argv)
    * Note that this balance step is not strictly necessary since we are using
    * uniform refinement but may be required for other types of refinement.
    */
-  balance = 1;
+  balance = 0;
   if (balance) {
     p4est_balance (p4est, P4EST_CONNECT_FACE, NULL);
     p4est_partition (p4est, 0, NULL);
