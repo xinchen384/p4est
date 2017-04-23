@@ -1212,7 +1212,8 @@ p4est_remove(p4est_t * p4est)
               *mtemp = *cur;
             }
 
-if (cur->p.user_int != 1){
+            if (cur->p.user_int == 0){
+              //if (cur->p.user_int != 1) printf("deleted : %d,", cur->p.user_int); 
               p4est_quadrant_free_data (p4est, cur);
               tree->quadrants_per_level[cur->level] -= 1;
               p4est->local_num_quadrants--;

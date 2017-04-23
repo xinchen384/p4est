@@ -72,6 +72,9 @@
 int*** test_array1;
 int*** test_array2;
 int cube_len = -1;
+int sk_level = 4;
+
+int print_sign = 0;
 
 typedef struct
 {
@@ -103,6 +106,38 @@ refine_fractal (p4est_t * p4est, p4est_topidx_t which_tree,
     );
 }
 
+void test_break(){}
+
+void sort_p4est(p4est_t *p4est){
+	sc_array_t *quads;
+	p4est_tree_t *tree;
+        tree = p4est_tree_array_index(p4est->trees, 0);
+	quads = &(tree->quadrants);
+        sc_array_sort(quads, p4est_quadrant_compare);
+}
+
+void check_data_fields(p4est_t *p4est){
+        sc_array_t *quads;
+	p4est_tree_t *tree;
+        sc_array_t *array;
+        p4est_quadrant_t *q;
+        int i;
+	char *s;
+        int myc = 0;
+
+        tree = p4est_tree_array_index(p4est->trees, 0);
+	quads = &(tree->quadrants);
+	array = quads;
+        s = array->array;
+        for (i=0; i<array->elem_count; i++){
+          q = (p4est_quadrant_t *) s;
+          printf("%d ", q->p.user_int); 
+          s += array->elem_size;
+          myc++;
+        } 
+        printf("\n quadrant counts: %d, data: \n", myc);
+}
+
 int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
                                        p4est_topidx_t which_tree,
                                        p4est_quadrant_t *quadrant)
@@ -118,13 +153,12 @@ int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
 
         tilelen = 1 << (refine_level - quadrant->level);
         unit_len = P4EST_QUADRANT_LEN (refine_level);
-        //printf ("**** in main set operation x: %d y: %d level %d tilelen: %d \n", quadrant->x/unit_len, quadrant->y/unit_len, quadrant->level, tilelen);
-#ifdef P4_TO_P8
-        //printf ("z: %d \n", quadrant->z/unit_len);
-#endif
+        //printf ("**** in main set operation x: %d y: %d z: %d level %d tilelen: %d \n", quadrant->x/unit_len, quadrant->y/unit_len, quadrant->z/unit_len, quadrant->level, tilelen);
         // 1st input tree
         tree1 = p4est_tree_array_index(p4est_in1->trees, 0);
         quads1 = &(tree1->quadrants);
+        //if (print_sign == 1) 
+        //  printf(" tree 1 element count: %zu, ele size: %zu\n", quads1->elem_count, quads1->elem_size);
         q1_index = sc_array_bsearch(quads1, quadrant, p4est_quadrant_compare);
         if (q1_index != -1) { // quadrant match in 1st input tree
                 //printf("found on in 1st input tree (((())))))\n");
@@ -138,7 +172,13 @@ int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
         // 2nd input tree
         tree2 = p4est_tree_array_index(p4est_in2->trees, 0);
         quads2 = &(tree2->quadrants);
+        if (print_sign == 1)
+          sc_array_sort(quads2, p4est_quadrant_compare);
         q2_index = sc_array_bsearch(quads2, quadrant, p4est_quadrant_compare);
+        if (print_sign == 1){ 
+          //printf(" tree 2 element count: %zu, ele size: %zu\n", quads2->elem_count, quads2->elem_size);
+          //if (q2_index != -1)  printf("======>>>>>>>>>>>>>> found one in the second tree!!!! %d\n ", q2_index);
+        }
         if (q2_index == -1 && !q1_match) { // no match on either input
                 if (quadrant->p.user_int == GRAY) { // "subtree" case; refine
                         return -1;
@@ -150,7 +190,8 @@ int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
                         quadrant->p.user_int = MARKED;  // tree2 is 0 >> 1 & 0 => 1 
                         return 0;
                 } else { // entering "subtree" case; refine
-                        printf(" tree1 is marked, but tree2 needs to be refined!!! enter sub tree !!!!!!!\n ");
+                        //if (print_sign == 1)
+                        //printf(" tree1 is marked, but tree2 needs to be refined!!! enter sub tree !!!!!!!\n ");
                         return -1;
                 }
         } else { // match in 2nd input tree
@@ -163,10 +204,13 @@ int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
                         return 0;
                 } else if (!q1_match && !q2->p.user_int) { // no match in 1st input; matched "marked" in 2nd
                         if (quadrant->p.user_int == GRAY) { // in "subtree" case
-                                printf(" tree2 is unmarked, tree1 had been refined!!! \n ");
+                                //if (print_sign == 1)
+                                //printf(" tree2 is unmarked, tree1 had been refined!!! \n ");
                                 quadrant->p.user_int = MARKED;
                                 return 0;
                         } else { // entering "subtree" case; refine
+                                //if (print_sign == 1)
+                                //printf(" tree2 is unmarked, tree1 needs refined, sub sub\n ");
                                 return -1;
                         }
                 } else { // shouldn't enter this clause
@@ -261,13 +305,28 @@ refine_offset (p4est_t * p4est, p4est_topidx_t which_tree,
 }
 
 int
-refine_sphere1 (p4est_t * p4est, p4est_topidx_t which_tree,
+refine_full (p4est_t * p4est, p4est_topidx_t which_tree,
+                p4est_quadrant_t * q)
+{
+  
+  if ((int) q->level >= sk_level){
+    q->p.user_int = MARKED;
+    return 0;
+  }
+  if ((int) q->level < min_level) {
+    return 1;
+  }
+  return 1;
+}
+
+int
+refine_test (p4est_t * p4est, p4est_topidx_t which_tree,
                 p4est_quadrant_t * q)
 {
   int                 qid;
   int                 tilelen;
   int                 i, j, k;
-  int                 markedCount;
+  int                 markedCount, hardCount;
   double                 offsi, offsj, offsk;
   double                 tx, ty, tz, temp;
   int ix, iy, iz;
@@ -297,9 +356,150 @@ refine_sphere1 (p4est_t * p4est, p4est_topidx_t which_tree,
         ix = (int)(offsi-0.5) + i;
         iy = (int)(offsj-0.5) + j;
         iz = (int)(offsk-0.5) + k;
-        if (test_array1[ix][iy][iz] >= 1){
+        if ( (ix-center)*(ix-center) + (iy-center)*(iy-center) + (iz-center_z)*(iz-center_z) <= radix1*radix1 ){
           markedCount += 1;
         }
+      }
+    }
+  }
+  
+  if (!markedCount) {
+          q->p.user_int = UNMARKED;
+          return 0;
+  } else if (tilelen*tilelen*tilelen == 1 && markedCount == 1) {
+          q->p.user_int = MARKED;
+          return 0;
+  } else {
+          return 1;
+  }
+  return 0;
+}
+
+int
+refine_sphere1 (p4est_t * p4est, p4est_topidx_t which_tree,
+                p4est_quadrant_t * q)
+{
+  int                 qid;
+  int                 tilelen;
+  int                 i, j, k;
+  int                 markedCount, hardCount;
+  double                 offsi, offsj, offsk;
+  double                 tx, ty, tz, temp;
+  int ix, iy, iz;
+  p4est_qcoord_t      unit_len, current_len;
+
+  if ((int) q->level > refine_level) {
+    return 0;
+  }
+  if ((int) q->level < min_level) {
+    return 1;
+  }
+  tilelen = 1 << (refine_level - q->level);       /* Pixel size of quadrant */
+  unit_len = P4EST_QUADRANT_LEN (refine_level);
+  current_len = P4EST_QUADRANT_LEN (q->level); 
+  offsi = (double)(q->x) / unit_len + 0.5;       /* Pixel x offset */
+  offsj = (double)(q->y) / unit_len + 0.5;       /* Pixel y offset */
+  offsk = (double)(q->z) / unit_len + 0.5;       /* Pixel z offset */
+  
+  P4EST_ASSERT (offsi >= 0 && offsj >= 0 && offsk >= 0);
+  markedCount = 0; 
+  hardCount = 0;
+  for (k = 0; k < tilelen; ++k) {
+    for (j = 0; j < tilelen; ++j) {
+      for (i = 0; i < tilelen; ++i) {
+        tx = offsi + i;
+        ty = offsj + j;
+        tz = offsk + k; 
+        ix = (int)(offsi-0.5) + i;
+        iy = (int)(offsj-0.5) + j;
+        iz = (int)(offsk-0.5) + k;
+        if (test_array1[ix][iy][iz] == 1||test_array1[ix][iy][iz] == 3) markedCount += 1;
+        if (test_array1[ix][iy][iz] == 2) hardCount += 1;
+      }
+    }
+  }
+  if (hardCount == tilelen*tilelen*tilelen){
+    q->p.user_int = 2;
+    return 0;
+  }
+  if (!markedCount) {
+          q->p.user_int = UNMARKED;
+          return 0;
+  } else if (tilelen*tilelen*tilelen == 1 && markedCount == 1) {
+          q->p.user_int = MARKED;
+          return 0;
+  } else {
+          return 1;
+  }
+  return 0;
+}
+
+int check_data(int*** data_array, int si, int sj, int sk, int level){
+  int times;   
+  int ti, tj, tk;
+  int i, j, k; 
+  int t1, t2, t3;
+  if ( level > refine_level ){
+    printf("****** need to handle a higher refine level!!!!*****\n");
+    return 0;
+  }
+  times = 1 << (refine_level - level);
+  ti = si*times;
+  tj = sj*times;
+  tk = sk*times;
+  for (i=0; i<times; i++) 
+  for (j=0; j<times; j++) 
+  for (k=0; k<times; k++) {
+    t1 = ti + i;
+    t2 = tj + j;
+    t3 = tk + k;
+    if (data_array[t1][t2][t3] == 1) return 1; 
+  }
+  return 0;
+}
+
+int
+refine_border (p4est_t * p4est, p4est_topidx_t which_tree,
+                p4est_quadrant_t * q)
+{
+  int                 qid;
+  int                 tilelen;
+  int                 i, j, k;
+  int                 markedCount;
+  double                 offsi, offsj, offsk;
+  double                 tx, ty, tz, temp;
+  int ix, iy, iz;
+  p4est_qcoord_t      unit_len, current_len;
+  int cur_level;
+  // the border does not have to be a high refine_level
+  cur_level = sk_level;
+
+  if ((int) q->level > cur_level) {
+    return 0;
+  }
+  if ((int) q->level < min_level) {
+    return 1;
+  }
+  tilelen = 1 << (cur_level - q->level);       /* Pixel size of quadrant */
+  unit_len = P4EST_QUADRANT_LEN (cur_level);
+
+  offsi = (double)(q->x) / unit_len + 0.5;       /* Pixel x offset */
+  offsj = (double)(q->y) / unit_len + 0.5;       /* Pixel y offset */
+  offsk = (double)(q->z) / unit_len + 0.5;       /* Pixel z offset */
+  
+  P4EST_ASSERT (offsi >= 0 && offsj >= 0 && offsk >= 0);
+  markedCount = 0; 
+  for (k = 0; k < tilelen; ++k) {
+    for (j = 0; j < tilelen; ++j) {
+      for (i = 0; i < tilelen; ++i) {
+        tx = offsi + i;
+        ty = offsj + j;
+        tz = offsk + k; 
+        ix = (int)(offsi-0.5) + i;
+        iy = (int)(offsj-0.5) + j;
+        iz = (int)(offsk-0.5) + k;
+        //if (test_array2[ix][iy][iz] == 1) markedCount += 1;
+        if (check_data(test_array2, ix, iy, iz, cur_level) == 1) markedCount += 1;
       }
     }
   }
@@ -315,59 +515,20 @@ refine_sphere1 (p4est_t * p4est, p4est_topidx_t which_tree,
   return 0;
 }
 
-int
-refine_sphere2 (p4est_t * p4est, p4est_topidx_t which_tree,
-                p4est_quadrant_t * q)
-{
-  int                 qid;
-  int                 tilelen;
-  int                 i, j, k;
-  int                 markedCount;
-  double                 offsi, offsj, offsk;
-  double                 tx, ty, tz, temp;
-  int ix, iy, iz;
-  p4est_qcoord_t      unit_len, current_len;
-
-  if ((int) q->level > refine_level) {
-    return 0;
+int*** initialize_array(int len){
+  int*** data_array;
+  int i, j, k;
+  data_array = (int***) malloc(len * sizeof(int **));
+  for (i=0; i<len; i++){
+    data_array[i] = (int **) malloc ( len* sizeof(int*) );
+    for (j=0; j<len; j++)
+      data_array[i][j] = (int *) malloc ( len* sizeof(int) );
   }
-  if ((int) q->level < min_level) {
-    return 1;
-  }
-  tilelen = 1 << (refine_level - q->level);       /* Pixel size of quadrant */
-  unit_len = P4EST_QUADRANT_LEN (refine_level);
-  current_len = P4EST_QUADRANT_LEN (q->level); 
-  offsi = (double)(q->x) / unit_len + 0.5;       /* Pixel x offset */
-  offsj = (double)(q->y) / unit_len + 0.5;       /* Pixel y offset */
-  offsk = (double)(q->z) / unit_len + 0.5;       /* Pixel z offset */
-  
-  P4EST_ASSERT (offsi >= 0 && offsj >= 0 && offsk >= 0);
-  markedCount = 0; 
-  for (k = 0; k < tilelen; ++k) {
-    for (j = 0; j < tilelen; ++j) {
-      for (i = 0; i < tilelen; ++i) {
-        tx = offsi + i;
-        ty = offsj + j;
-        tz = offsk + k; 
-        ix = (int)(offsi-0.5) + i;
-        iy = (int)(offsj-0.5) + j;
-        iz = (int)(offsk-0.5) + k;
-        if (test_array2[ix][iy][iz] == 1){
-          markedCount += 1;
-        }
-      }
-    }
-  }
-  if (!markedCount) {
-          q->p.user_int = UNMARKED;
-          return 0;
-  } else if (tilelen*tilelen*tilelen == 1 && markedCount == 1) {
-          q->p.user_int = MARKED;
-          return 0;
-  } else {
-          return 1;
-  }
-  return 0;
+  for ( i=0; i<len; i++ )
+  for ( j=0; j<len; j++ )
+  for ( k=0; k<len; k++ )
+    data_array[i][j][k] = 0;
+  return data_array;
 }
 
 int*** read_array(const char *file_name){
@@ -410,12 +571,91 @@ int*** read_array(const char *file_name){
       //printf ("length %zu line: %s \n", read, line);
       for ( k=0; k<len; k++ ){
         test_array[i][j][k] = (int)line[k] - 48;
+        // 
+        //if (test_array[i][j][k] == 0) test_array[i][j][k] = 2;
       }
     } 
   }
   fclose(fp);
   printf ("finish loading the volume file into array!\n");
   return test_array;
+}
+
+//has segmentation faults
+void fill_neighbors(int*** data_array, int i, int j, int k, int len){
+  int s1, s2, s3;
+  int ip, jp, kp;
+  int temp_array[29];
+  int count = 0;
+
+  for (s1=0; s1<3; s1++)
+  for (s2=0; s2<3; s2++)
+  for (s3=0; s3<3; s3++){
+    ip = i-1+s1;
+    jp = j-1+s2;
+    kp = k-1+s3; 
+    if (ip>=0 && ip<len && jp>=0 && jp<len && kp>=0 && kp<len){
+      printf(" xxxxxx %d, %d, %d\n ", ip, jp, kp);
+      if (data_array[ip][jp][kp] == 2) {
+        data_array[ip][jp][kp] = 0; 
+        //fill_neighbors(data_array, ip, jp, kp, len);
+        temp_array[count] = ip;
+        temp_array[count+1] = jp;
+        temp_array[count+2] = kp;
+        count += 3;
+      } 
+      //data_array[ip][jp][kp] = 
+    } 
+  }
+  for (s1=0; s1<count/3; s1++){
+    fill_neighbors(data_array, temp_array[3*s1], temp_array[3*s1+1], temp_array[3*s1+2], len);
+  }
+}
+
+//void fill_out_cubes(int*** data_array, int len){
+//  fill_neighbors(data_array, 0, 0, 0, len);
+//}
+
+void fill_one_line(int* data_array, int len){
+  int lid, rid;
+  int next_solid;
+  lid = 0;
+  rid = len-1;
+  next_solid = 0;
+  while (lid < len && rid >= 0 && lid < rid){
+    if (next_solid == 1){
+      while(lid < len && data_array[lid] == 0 ){ data_array[lid] = 2; lid++; }
+      while(rid >= 0  && data_array[rid] == 0 ){ data_array[rid] = 2; rid--; }
+      next_solid = 0;
+    } else{
+      while( lid <len && data_array[lid] == 0 ){ lid++; }
+      while( rid >= 0 && data_array[rid] == 0 ){ rid--; }
+      next_solid = 1;
+    }
+    if (lid >= len || rid < 0 || lid >= rid)break;
+    if (data_array[lid] == data_array[rid] && data_array[lid] == 1){
+      lid++; rid--;
+    } else{
+      printf("error here: left %d: %d, right %d: %d \n", 
+	lid, data_array[lid], rid, data_array[rid] );
+      return;
+    }
+  }
+}
+
+// assume the object is continuous
+void fill_out_cube(int*** data_array, int len){
+  int i, j, k;
+  int *data_temp;
+  // the start is always an element of 0
+  // this indicates that the inner part has been signed
+  int data;
+  for (i=0; i<len; i++){
+    for (j=0; j<len; j++){
+      data_temp = data_array[i][j];
+      fill_one_line(data_temp, len); 
+    }
+  }
 }
 
 void grow_element(int*** data_array, int i, int j, int k, int dis, int len){
@@ -476,9 +716,9 @@ void volume_offset(int*** data_array, int dis, int len){
   } 
 }
 
-void path_offset(int*** data_array, int dis, int len){
+void path_offset(int*** data_array, int p, int dis, int len){
   int i, j, k;
-  int start_sd = len*9/10;
+  int start_sd = p;
   for (i=0; i<len; i++)
   for (j=0; j<len; j++)
   for (k=start_sd; k<start_sd+1; k++){
@@ -487,6 +727,19 @@ void path_offset(int*** data_array, int dis, int len){
     }
   } 
 }
+
+void set_outer(int*** data_array, int dis, int len){
+  int i, j, k;
+  for (i=0; i<len; i++)
+  for (j=0; j<len; j++)
+  for (k=0; k<len; k++){
+    if ( i<=dis || j<=dis || k<=dis 
+      || i>=len-dis || j>=len-dis || k>=len-dis ){
+      data_array[i][j][k] = 1;
+    } 
+  }
+}
+
 
 
 int
@@ -506,6 +759,9 @@ main (int argc, char **argv)
   p4est_t            *p4est1;
   p4est_t            *p4est2;
   p4est_t            *p4est_out;
+
+  p4est_t            *p4est3;
+  p4est_t            *p4est_cut;
   p4est_nodes_t      *nodes = NULL;
   p4est_ghost_t      *ghost;
   p4est_lnodes_t     *lnodes;
@@ -529,7 +785,9 @@ main (int argc, char **argv)
   //*********
   const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/head-volume";
   //const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/teapot-volume";
+  //const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/candle-volume";
   test_array1 = read_array(fname1);  
+  fill_out_cube(test_array1, cube_len);
   //test_array2 = read_array(fname2);  
 
   /* initialize MPI and p4est internals */
@@ -575,8 +833,10 @@ main (int argc, char **argv)
 #endif
 
   p4est1 = p4est_new_ext (mpi->mpicomm, connectivity, 0, min_level, 1, 0, NULL, NULL);
-  //p4est2 = p4est_copy(p4est1, 1); 
-  //p4est_out = p4est_copy(p4est1, 1); 
+  p4est2 = p4est_copy(p4est1, 1); 
+  p4est_out = p4est_copy(p4est1, 1); 
+  p4est3 = p4est_copy(p4est1, 1); 
+  p4est_cut = p4est_copy(p4est1, 1); 
 
   max_ranges = -1;
   p4est1->inspect = P4EST_ALLOC_ZERO (p4est_inspect_t, 1);
@@ -589,41 +849,71 @@ main (int argc, char **argv)
      (overlap && subtree), (overlap && borders));
   quadrant_counts = P4EST_ALLOC (p4est_locidx_t, p4est1->mpisize);
 
+  printf("start now ... offset\n");
 
-  printf("start now ... offset: %d \n", offset);
+  p4est_refine (p4est1, 1, refine_sphere1, NULL);
+  test_array2 = initialize_array(cube_len);
+  set_outer(test_array2, 32, cube_len); 
+  p4est_refine (p4est2, 1, refine_border, NULL);
+  p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
 
 gettimeofday(&t1, NULL);
+  sort_p4est(p4est_out);
   //volume_offset(test_array1, 5, cube_len); 
-  path_offset(test_array1, 10, cube_len); 
-  //p4est_refine (p4est1, 1, refine_offset, NULL);
-  //p4est_intersection(p4est1, p4est2, p4est_out);
-  //p4est_union(p4est1, p4est2, p4est_out);
-  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
+  //for ( i=5; i < cube_len; ){
+  //path_offset(test_array1, i, 5, cube_len); 
+  //i += 10;
+  //} 
+  //path_offset(test_array1, 18, 10, cube_len); 
+  //path_offset(test_array1, 19, 10, cube_len); 
 gettimeofday(&t2, NULL);
   elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
   elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
   printf(" >>>>>>>  operation p4est offset elapsedTime %f  ms.\n", elapsedTime);
 
+//printf( " start cutting !!!!!!!!!!!!!!!!!!!\n" );
+  p4est_refine (p4est3, 1, refine_full, NULL);
+  p4est_diff(p4est3, p4est_out, p4est_cut, p4est_diff_aafn);
 
+  /*
+  p4est_refine (p4est1, 1, refine_test, NULL);
+  p4est_refine (p4est2, 1, refine_full, NULL);
+  p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
+  //check_data_fields(p4est_out);
+  p4est_refine (p4est3, 1, refine_full, NULL);
+  print_sign = 0;
+  printf( " start cutting !!!!!!!!!!!!!!!!!!!\n" );
+  test_break();
+  p4est_diff(p4est3, p4est_out, p4est_cut, p4est_diff_aafn);
+  */
 
-  /* time refine */
-  sc_flops_snap (&fi, &snapshot);
-  p4est_refine (p4est1, 1, refine_sphere1, NULL);
-  //p4est_refine (p4est2, 1, refine_sphere2, NULL);
-  sc_flops_shot (&fi, &snapshot);
+  //check_data_fields(p4est3);
+  
+  //p4est_diff(p4est3, p4est_out, p4est_out1, p4est_diff_aafn);
+  //p4est_refine (p4est1, 1, refine_offset, NULL);
+  //p4est_intersection(p4est1, p4est2, p4est_out);
+  //p4est_union(p4est1, p4est2, p4est_out);
+  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
 
- 
+  printf( " ====> removing all empty quadrants!\n" );
   p4est_remove(p4est1);
   //p4est_remove(p4est2);
-  //p4est_remove(p4est_out);
+  printf( " ====> removing all empty for border!\n" );
+  p4est_remove(p4est_out);
+  p4est_remove(p4est3);
+  p4est_remove(p4est_cut);
+
+  //p4est_remove(p4est_out1);
   //sc_stats_set1 (&stats[TIMINGS_REFINE], snapshot.iwtime, "Refine");
   printf("finish operations here, start writing file !!!\n");
 
 #ifdef P4EST_TIMINGS_VTK
-  //p4est_vtk_write_file (p4est1, NULL, "tree1_teapot");
   p4est_vtk_write_file (p4est1, NULL, "tree_head");
-  //p4est_vtk_write_file (p4est2, NULL, "tree_teapot");
-  //p4est_vtk_write_file (p4est_out, NULL, "tree_intersect");
+  //p4est_vtk_write_file (p4est1, NULL, "tree1_teapot");
+  p4est_vtk_write_file (p4est2, NULL, "tree_second");
+  p4est_vtk_write_file (p4est3, NULL, "tree_full");
+  p4est_vtk_write_file (p4est_out, NULL, "tree_border");
+  p4est_vtk_write_file (p4est_cut, NULL, "tree_cut");
 #endif
   count_refined = p4est1->global_num_quadrants;
 
@@ -631,13 +921,15 @@ gettimeofday(&t2, NULL);
   P4EST_FREE (quadrant_counts);
   P4EST_FREE (p4est1->inspect);
   p4est_destroy (p4est1);
-  //p4est_destroy (p4est2);
-  //p4est_destroy (p4est_out);
+  p4est_destroy (p4est2);
+  p4est_destroy (p4est_out);
+
+  p4est_destroy (p4est3);
+  p4est_destroy (p4est_cut);
   p4est_connectivity_destroy (connectivity);
 
   /* clean up and exit */
   sc_finalize ();
-
   mpiret = sc_MPI_Finalize ();
   SC_CHECK_MPI (mpiret);
 
