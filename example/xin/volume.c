@@ -68,6 +68,7 @@
 #include <sys/time.h>
 
 #include "api.h"
+#include <math.h>
 
 int*** test_array1;
 int*** test_array2;
@@ -75,6 +76,16 @@ int cube_len = -1;
 int sk_level = 4;
 
 int print_sign = 0;
+
+// tool configurations
+double tool_len[5];
+double tool_r[5];
+int tool_pieces = 5;
+double tool_length = 0;
+double val = 180.0/PI;
+int map_row = 64;
+int map_col = 128;
+int** map;
 
 typedef struct
 {
@@ -135,8 +146,10 @@ void check_data_fields(p4est_t *p4est){
           s += array->elem_size;
           myc++;
         } 
-        printf("\n quadrant counts: %d, data: \n", myc);
+        printf("\n quadrant counts: %d, the element coutn in the list: %d\n", myc, (int)(array->elem_count));
 }
+
+
 
 int p4est_diff_aafn (p4est_t *p4est_in1, p4est_t *p4est_in2, p4est_t *p4est,
                                        p4est_topidx_t which_tree,
@@ -229,6 +242,256 @@ int valid_id(int x, int y, int z){
     res = 1;
   return res;
 }
+
+
+int check_tool_border(int id, double dist){
+  double min, max, minr, maxr;
+  int pid;
+  double radius; 
+  pid = tool_pieces - 1; 
+  if ( id > pid || id < 0 ){
+    printf(" *** the tool id is out of range !!! error: %d\n", id );
+    return 0;
+  }
+  min = 0;
+  while (pid > id){
+    //printf(" the steps: %f, ", tool_len[pid]);
+    min += tool_len[pid]; 
+    pid--; 
+  }
+  max = min + tool_len[id]; 
+  radius = tool_r[id];
+  minr = min*min + radius*radius;
+  maxr = max*max + radius*radius;
+  if (dist*dist >= maxr){
+    if (pid <= 0){
+      printf(" *** calculation is wrong, does not belong this piece id %d, %f %f > %f !!!\n", id, max, radius, dist);
+      return 0;
+    }else{
+      // on the upper level
+      return -1;
+    }
+  }
+  if (dist*dist < minr){
+    // go to the lower level 
+    return 1;
+  }
+  if (dist*dist < maxr && dist*dist >= minr){
+    return 0;
+  }
+  printf(" *** unacceptable condition in checking tool border !!!\n");
+  return 0;
+}
+
+double get_tool_intersect(double dist){
+  // assume the dist starts from the central point of the tool
+  double s = dist;
+  double sum, angle ;
+  int pid = tool_pieces - 1;
+  double pieceR = -1.0;
+  int i, ret, k;
+
+  if (dist >= tool_length){
+    //can not reach
+    return 0;
+  }
+
+  while (s > 0 && pid >= 0){
+    s = s - tool_len[pid];
+    pid--;
+  }
+  
+  //if (dist > 224) printf("left %f pid %d\n", s, pid);
+  //printf("end checking the length, ");
+  if (s < 0)pid++;
+
+  if (pid < 0){
+    printf(" the tool is not long enough %f to reach the dist %f !!!\n", tool_length, dist);
+    //indicate that  it is not accessible at any cases
+    return 360.0;
+  } else{
+    //printf("start checking the arc, id %d, dist %f,  ", pid, dist);
+    ret = check_tool_border(pid, dist);
+    while (pid<= (tool_pieces-1) && ret == 1) {
+      ret = check_tool_border(pid, dist);
+      pid++;
+    } 
+    
+    //printf("end checking the arc, id %d, dist %f,  ", pid, dist);
+    if (pid > tool_pieces - 1){
+      printf(" there must be something wrong with the tool border calculation!!! \n ");
+      return -1.0;
+    }
+    if (ret == 0){
+      pieceR = tool_r[pid]; 
+      angle = asin(pieceR/dist) * val; 
+      if (isnan(angle)){ 
+        printf(" short radius %f at id: %d with distance %f \n", pieceR, pid, dist); 
+      }
+      return angle;
+    }else if (ret == -1){
+      sum = 0;
+      k = tool_pieces - 1;
+      while (k >= pid){
+        sum += tool_len[k]; 
+        k--; 
+      }    
+      angle = acos(sum/dist) * val; 
+      if (isnan(angle)){ 
+        printf(" short radius %f at id: %d with distance %f \n", pieceR, pid, dist); 
+      }
+      return angle;
+    }
+  }
+  printf(" calculating the tool border angle cause error !!!\n");
+  return -1.0; 
+}
+
+// note that the coordinates should be normalized
+void mark_accessibility_map(p4est_t *p4est, int x, int y, int z){
+        sc_array_t *quads;
+	p4est_tree_t *tree;
+        sc_array_t *array;
+        p4est_quadrant_t *q;
+	p4est_qcoord_t      unit_len;
+  	struct timeval t1, t2;
+  	double elapsedTime;
+        int i, j, k;
+        int elem_size;
+        int myc;
+	int tilelen;
+	int ica_id;
+
+  	double offsi, offsj, offsk, radius;
+	double rad, dist;
+        double ica1, ica2;
+
+	double sita, sigma;
+	double vec_x, vec_y, vec_z;
+        double temp, angle, ica_angle;
+	double *ICA_list;
+	char *s;
+
+        unit_len = P4EST_QUADRANT_LEN (refine_level);
+        tree = p4est_tree_array_index(p4est->trees, 0);
+	quads = &(tree->quadrants);
+	array = quads;
+
+gettimeofday(&t1, NULL);
+	myc = 0;
+        s = array->array;
+	for (i=0; i<array->elem_count; i++){
+          q = (p4est_quadrant_t *) s;
+	  if (q->p.user_int == 1){
+            myc++;
+	  }
+          //printf("%d ", q->p.user_int); 
+          s += array->elem_size;
+        }
+        printf("\n total quadrant counts: %zu, data fields count: %d\n", array->elem_count, myc);
+gettimeofday(&t2, NULL);
+	elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+	elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+	printf(" >>>>>>>  one iteration takes %f  ms.\n", elapsedTime);
+
+        elem_size = (int) array->elem_count;
+        ICA_list = malloc( myc*sizeof(double) );
+	for (i=0; i<myc; i++)
+	  ICA_list[i] = 0.0;
+
+	// generate ICA for each element
+	s = array->array;
+	ica_id = 0;
+        for (i=0; i<array->elem_count; i++){
+          q = (p4est_quadrant_t *) s;
+	  if (q->p.user_int == 1){
+   	  offsi = (double)(q->x) / unit_len + 0.5;       /* Pixel x offset */
+	  offsj = (double)(q->y) / unit_len + 0.5;       /* Pixel y offset */
+	  offsk = (double)(q->z) / unit_len + 0.5;       /* Pixel z offset */
+          dist = (offsi-x)*(offsi-x) + (offsj-y)*(offsj-y) + (offsk-z)*(offsk-z);
+          dist = sqrt(dist);
+          //printf(" start calculating ICA 1 with dist: %f \n ", dist);
+          ica1 = get_tool_intersect(dist); 
+  	  tilelen = 1 << (refine_level - q->level);       
+          rad = (double)tilelen/2;
+          ica2 = asin(rad/dist) * val;
+          //if (isnan(ica)){
+     	  //  printf(" detecting nan number: 1: %f, 2: %f \n", ica1, ica2);
+	  //}
+          ICA_list[ica_id] =ica1 + ica2; 
+	  ica_id++;
+	  }
+          //printf("%d ", q->p.user_int); 
+          s += array->elem_size;
+        }
+        printf(" finish generating ICA list ! %d %d\n ", ica_id, myc);
+	for (i=0; i<myc; i++){
+          //if (isnan(ICA_list[i]))
+          if (ICA_list[i] >= 360.0)
+	  printf("%f ", ICA_list[i]);
+	}
+	//printf("\nend ica list two counts: %d %d\n", ica_id, myc);
+
+	map = (int **)malloc(map_row * sizeof(int *));
+        for (i=0; i<map_row; i++)
+	  map[i] = (int*) malloc(map_col * sizeof(int));
+	// initialize the map as accessible (0)
+	for (i=0; i<map_row; i++)
+	for (j=0; j<map_col; j++){
+	  map[i][j] = 0;
+	}
+
+        for ( i=0; i<map_row; i++ ){
+        for ( j=0; j<map_col; j++ ){
+	  sita = j * 180.0/map_col / val;
+	  sigma = i * 360.0/map_row / val; 
+	  vec_x = sin(sita)*cos(sigma);
+	  vec_y = sin(sita)*sin(sigma);
+	  vec_z = cos(sita);
+
+          s = array->array;
+	  ica_id = 0;
+          for (k=0; k<array->elem_count; k++){
+            q = (p4est_quadrant_t *) s;
+	    if (q->p.user_int == 1){
+   	    offsi = (double)(q->x) / unit_len + 0.5;       /* Pixel x offset */
+	    offsj = (double)(q->y) / unit_len + 0.5;       /* Pixel y offset */
+	    offsk = (double)(q->z) / unit_len + 0.5;       /* Pixel z offset */
+            dist = (offsi-x)*(offsi-x) + (offsj-y)*(offsj-y) + (offsk-z)*(offsk-z);
+            dist = sqrt(dist);
+	    temp = ((offsi-x)*vec_x + (offsj-y)*vec_y + (offsk-z)*vec_z)/dist;
+	    angle = acos(temp) * val;
+            ica_angle = ICA_list[ica_id];
+            ica_id++;
+	    //if (ICA_list[ica_id] < 360.0){
+            //  printf ("the angle is %f, ica angle is %f\n", angle, ICA_list[ica_id]);
+ 	    //}
+            if (angle <= ica_angle){
+              //printf ("check,");
+	      map[i][j] = 1;
+	      break;
+            }  
+	    }
+            //printf("%d ", q->p.user_int); 
+            s += array->elem_size;
+          }
+	}
+          printf(" progress i: %d, j: %d \n", i, j );
+	}
+        printf(" finished calculating the access map \n");
+}
+
+void print_map(){
+  int i, j;
+  for (i=0; i<map_row; i++){
+    for (j=0; j<map_col; j++){
+      printf("%d", map[i][j]);
+      //if (map[i][j] == 1) printf("a");
+    }
+    printf("\n");
+  }
+}
+
 
 int
 refine_offset (p4est_t * p4est, p4est_topidx_t which_tree,
@@ -740,8 +1003,6 @@ void set_outer(int*** data_array, int dis, int len){
   }
 }
 
-
-
 int
 main (int argc, char **argv)
 {
@@ -779,6 +1040,24 @@ main (int argc, char **argv)
   int                 skip_nodes, skip_lnodes;
   int                 repartition_lnodes;
 
+  double x, ret;
+tool_len[0] = 22; // start 0
+tool_len[1] = 78;  // start 22
+tool_len[2] = 15.94; // start at 100
+tool_len[3] = 5.08;  // start at 115.94
+tool_len[4] = 2.28;  // start at 121.02
+
+tool_r[0] = 31.5;
+tool_r[1] = 25;
+tool_r[2] = 1.59;
+tool_r[3] = 1.59;
+tool_r[4] = 0.79375;
+
+  for (i=0; i<tool_pieces; i++){
+    tool_len[i] *= 2;
+    tool_r[i] *= 2;
+    tool_length += tool_len[i];
+  }
   //*********
   struct timeval t1, t2, t3, t4, t5;
   double elapsedTime;
@@ -787,7 +1066,7 @@ main (int argc, char **argv)
   //const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/teapot-volume";
   //const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/candle-volume";
   test_array1 = read_array(fname1);  
-  fill_out_cube(test_array1, cube_len);
+  //fill_out_cube(test_array1, cube_len);
   //test_array2 = read_array(fname2);  
 
   /* initialize MPI and p4est internals */
@@ -809,6 +1088,10 @@ main (int argc, char **argv)
   P4EST_GLOBAL_PRODUCTIONF ("Size of %dtant: %lld bytes\n", P4EST_DIM,
                             (long long) sizeof (p4est_quadrant_t));
 
+  x = 0.5;
+  ret = asin(x) * val;
+  printf (" test asin in C, sin(%f) = %f \n", ret, x );
+  //return 1;
   /* get command line argument: maximum refinement level */
   //level_shift = 2;
   //refine_level = 5;
@@ -852,13 +1135,18 @@ main (int argc, char **argv)
   printf("start now ... offset\n");
 
   p4est_refine (p4est1, 1, refine_sphere1, NULL);
-  test_array2 = initialize_array(cube_len);
-  set_outer(test_array2, 32, cube_len); 
-  p4est_refine (p4est2, 1, refine_border, NULL);
-  p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
+  // ======>  used to test cut layer by layer 
+  //test_array2 = initialize_array(cube_len);
+  //set_outer(test_array2, 32, cube_len); 
+  //p4est_refine (p4est2, 1, refine_border, NULL);
+  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
+  // this step becomes mandatory as the diff operation does not guarantee the sorting
+  //sort_p4est(p4est_out);
+  //printf( " start cutting !!!!!!!!!!!!!!!!!!!\n" );
+  //p4est_refine (p4est3, 1, refine_full, NULL);
+  //p4est_diff(p4est3, p4est_out, p4est_cut, p4est_diff_aafn);
 
-gettimeofday(&t1, NULL);
-  sort_p4est(p4est_out);
+  //  =========> used to test grow 
   //volume_offset(test_array1, 5, cube_len); 
   //for ( i=5; i < cube_len; ){
   //path_offset(test_array1, i, 5, cube_len); 
@@ -866,42 +1154,25 @@ gettimeofday(&t1, NULL);
   //} 
   //path_offset(test_array1, 18, 10, cube_len); 
   //path_offset(test_array1, 19, 10, cube_len); 
+
+gettimeofday(&t1, NULL);
+  mark_accessibility_map(p4est1, 128, 128, 255);
 gettimeofday(&t2, NULL);
   elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
   elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
-  printf(" >>>>>>>  operation p4est offset elapsedTime %f  ms.\n", elapsedTime);
+  printf(" >>>>>>>  operation p4est accessMap elapsedTime %f  ms.\n", elapsedTime);
 
-//printf( " start cutting !!!!!!!!!!!!!!!!!!!\n" );
-  p4est_refine (p4est3, 1, refine_full, NULL);
-  p4est_diff(p4est3, p4est_out, p4est_cut, p4est_diff_aafn);
-
-  /*
-  p4est_refine (p4est1, 1, refine_test, NULL);
-  p4est_refine (p4est2, 1, refine_full, NULL);
-  p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
+  print_map();
   //check_data_fields(p4est_out);
-  p4est_refine (p4est3, 1, refine_full, NULL);
-  print_sign = 0;
-  printf( " start cutting !!!!!!!!!!!!!!!!!!!\n" );
-  test_break();
-  p4est_diff(p4est3, p4est_out, p4est_cut, p4est_diff_aafn);
-  */
-
-  //check_data_fields(p4est3);
-  
-  //p4est_diff(p4est3, p4est_out, p4est_out1, p4est_diff_aafn);
-  //p4est_refine (p4est1, 1, refine_offset, NULL);
-  //p4est_intersection(p4est1, p4est2, p4est_out);
-  //p4est_union(p4est1, p4est2, p4est_out);
-  //p4est_diff(p4est2, p4est1, p4est_out, p4est_diff_aafn);
-
+  //check_data_fields(p4est1);
+ 
   printf( " ====> removing all empty quadrants!\n" );
   p4est_remove(p4est1);
   //p4est_remove(p4est2);
-  printf( " ====> removing all empty for border!\n" );
-  p4est_remove(p4est_out);
-  p4est_remove(p4est3);
-  p4est_remove(p4est_cut);
+  //printf( " ====> removing all empty for border!\n" );
+  //p4est_remove(p4est_out);
+  //p4est_remove(p4est3);
+  //p4est_remove(p4est_cut);
 
   //p4est_remove(p4est_out1);
   //sc_stats_set1 (&stats[TIMINGS_REFINE], snapshot.iwtime, "Refine");
@@ -910,10 +1181,10 @@ gettimeofday(&t2, NULL);
 #ifdef P4EST_TIMINGS_VTK
   p4est_vtk_write_file (p4est1, NULL, "tree_head");
   //p4est_vtk_write_file (p4est1, NULL, "tree1_teapot");
-  p4est_vtk_write_file (p4est2, NULL, "tree_second");
-  p4est_vtk_write_file (p4est3, NULL, "tree_full");
-  p4est_vtk_write_file (p4est_out, NULL, "tree_border");
-  p4est_vtk_write_file (p4est_cut, NULL, "tree_cut");
+  //p4est_vtk_write_file (p4est2, NULL, "tree_second");
+  //p4est_vtk_write_file (p4est3, NULL, "tree_full");
+  //p4est_vtk_write_file (p4est_out, NULL, "tree_border");
+  //p4est_vtk_write_file (p4est_cut, NULL, "tree_cut");
 #endif
   count_refined = p4est1->global_num_quadrants;
 
@@ -922,9 +1193,8 @@ gettimeofday(&t2, NULL);
   P4EST_FREE (p4est1->inspect);
   p4est_destroy (p4est1);
   p4est_destroy (p4est2);
-  p4est_destroy (p4est_out);
-
   p4est_destroy (p4est3);
+  p4est_destroy (p4est_out);
   p4est_destroy (p4est_cut);
   p4est_connectivity_destroy (connectivity);
 

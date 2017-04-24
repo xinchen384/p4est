@@ -24,6 +24,7 @@
 #include <sc_options.h>
 
 
+#define PI 3.14159265
 #define P4EST_TIMINGS_VTK 
 
 #define P4EST_REFINE_LEVEL 8 
