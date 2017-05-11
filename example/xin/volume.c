@@ -70,6 +70,23 @@
 #include "api.h"
 #include <math.h>
 
+typedef struct
+{
+  sc_MPI_Comm         mpicomm;
+  int                 mpisize;
+  int                 mpirank;
+}
+mpi_context_t;
+
+typedef struct
+{
+  double         x;
+  double         y;
+  double         z;
+}
+Point3d;
+
+
 int*** test_array1;
 int*** test_array2;
 int cube_len = -1;
@@ -85,15 +102,10 @@ double tool_length = 0;
 double val = 180.0/PI;
 int map_row = 64;
 int map_col = 128;
+//int map_row = 4;
+//int map_col = 8;
 int** map;
-
-typedef struct
-{
-  sc_MPI_Comm         mpicomm;
-  int                 mpisize;
-  int                 mpirank;
-}
-mpi_context_t;
+Point3d **rotate_vector;
 
 
 static int
@@ -347,6 +359,244 @@ double get_tool_intersect(double dist){
   return -1.0; 
 }
 
+void initialize_rotate_vector(){
+	double sita, sigma;
+	int i, j;
+	rotate_vector = (Point3d **)malloc(map_row * sizeof(Point3d *));
+        for (i=0; i<map_row; i++)
+	  rotate_vector[i] = (Point3d*) malloc(map_col * sizeof(Point3d));
+	for (i=0; i<map_row; i++)
+	for (j=0; j<map_col; j++){
+	    sita = j * 180.0/map_col / val;
+	    sigma = i * 360.0/map_row / val; 
+	    rotate_vector[i][j].x = sin(sita)*cos(sigma);
+	    rotate_vector[i][j].y = sin(sita)*sin(sigma);
+	    rotate_vector[i][j].z = cos(sita);
+	}
+	//for (i=0; i<map_row; i++){
+	//  for (j=0; j<map_col; j++)
+	//    printf("(%f, %f, %f), ", rotate_vector[i][j].x, rotate_vector[i][j].y, rotate_vector[i][j].z); 
+	//  printf("\n");
+	//}
+}
+
+void mark_angle_range(double sita1, double sita2, double sigma1, double sigma2, 
+		double offsi, double offsj, double offsk, double dist, double ica){
+	double sita, sigma;
+	double vec_x, vec_y, vec_z;
+	double vk, temp;
+	double sita_unit = 180.0/(double)map_col;
+	double sigma_unit = 360.0/(double)map_row;
+	int rid, cid;
+	int cid1, cid2;
+	int rid1, rid2;
+	int rt, ct, r, c;
+
+	cid = (int)(sita1/sita_unit);
+	if (sita1 <= ((double)cid)*sita_unit) cid1 = cid;
+	else cid1 = cid + 1;
+	cid2 = (int)(sita2/sita_unit);
+
+	rid = (int)(sigma1/sigma_unit);
+	if (sigma1 <= ((double)rid)*sigma_unit) rid1 = rid;
+	else rid1 = rid + 1;
+	rid2 = (int)(sigma2/sigma_unit);
+
+	vk = cos(ica/val);
+	for ( c=cid1; c<=cid2; c++ )
+	for ( r=rid1; r<=rid2; r++ ){ 
+          rt = r;
+	  ct = c;
+	  //if (rt < 0) rt = rt+map_row;
+	  //if (rt >= map_row) rt = rt-map_row;
+	  //note: sigma may be out of range
+	  //if (rt < 0) rt = rt+map_row;
+	  //if (rt >= map_row) rt = rt-map_row;
+	  //sita = ct * 180.0/map_col / val;
+	  //sigma = rt * 360.0/map_row / val; 
+	  //vec_x = sin(sita)*cos(sigma);
+	  //vec_y = sin(sita)*sin(sigma);
+	  //vec_z = cos(sita);
+	  vec_x = rotate_vector[rt][ct].x;
+	  vec_y = rotate_vector[rt][ct].y;
+	  vec_z = rotate_vector[rt][ct].z;
+	  temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z)/dist;
+	  //angle = acos(temp) * val;
+	  if ( map[rt][ct]==0 && temp>=vk ){
+	    map[rt][ct] = 1;
+	    //printf(" ======>>>>> check %f angle %f, ==== %f ica is %f\n", temp, angle, vk, ica);
+	  }
+	} 
+	//printf("end \n");
+}
+
+void mark_map(p4est_t *p4est, int x, int y, int z){
+        sc_array_t *quads;
+	p4est_tree_t *tree;
+        sc_array_t *array;
+        p4est_quadrant_t *q;
+	p4est_qcoord_t      unit_len;
+  	struct timeval t1, t2;
+  	double elapsedTime;
+        int i, j, k;
+        int elem_size;
+        int myc;
+	int tilelen;
+	int ica_id;
+
+  	double offsi, offsj, offsk, radius;
+	double rad, dist;
+        double ica1, ica2, ica;
+
+	double sita, sigma;
+	int cid, cid1, cid2;
+	int rid, rid1, rid2;
+	int c, r, ct, rt;
+	double x1, x2, y1, y2;
+	double sita_unit = 180.0/(double)map_col;
+	double sigma_unit = 360.0/(double)map_row;
+
+	double vec_x, vec_y, vec_z;
+        double temp, angle, ica_angle;
+	double start_angle, end_angle, angle1;
+	double *ICA_list;
+	double radS, v_sig, vk;
+	char *s;
+	
+        unit_len = P4EST_QUADRANT_LEN (refine_level);
+        tree = p4est_tree_array_index(p4est->trees, 0);
+	quads = &(tree->quadrants);
+	array = quads;
+
+gettimeofday(&t1, NULL);
+	myc = 0;
+        s = array->array;
+	for (i=0; i<array->elem_count; i++){
+          q = (p4est_quadrant_t *) s;
+	  if (q->p.user_int == 1){
+            myc++;
+	  }
+          //printf("%d ", q->p.user_int); 
+          s += array->elem_size;
+        }
+        printf("\n total quadrant counts: %zu, data fields count: %d\n", array->elem_count, myc);
+gettimeofday(&t2, NULL);
+	elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+	elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+	printf(" >>>>>>>  one iteration takes %f  ms.\n", elapsedTime);
+
+	// initialize the accessibility map
+	// initialize the map as accessible (0)
+	map = (int **)malloc(map_row * sizeof(int *));
+        for (i=0; i<map_row; i++)
+	  map[i] = (int*) malloc(map_col * sizeof(int));
+	for (i=0; i<map_row; i++)
+	for (j=0; j<map_col; j++){
+	  map[i][j] = 0;
+	}
+	
+	// initialize ICA list
+        elem_size = (int) array->elem_count;
+        ICA_list = malloc( myc*sizeof(double) );
+	for (i=0; i<myc; i++)
+	  ICA_list[i] = 0.0;
+	// generate ICA for each element
+	s = array->array;
+	ica_id = 0;
+        for (i=0; i<array->elem_count; i++){
+          q = (p4est_quadrant_t *) s;
+	  if (q->p.user_int == 1){
+   	  offsi = (double)(q->x) / unit_len + 0.5 - x;       /* Pixel x offset */
+	  offsj = (double)(q->y) / unit_len + 0.5 - y;       /* Pixel y offset */
+	  offsk = (double)(q->z) / unit_len + 0.5 - z;       /* Pixel z offset */
+          dist = sqrt(offsi*offsi + offsj*offsj + offsk*offsk);
+          //printf(" start calculating ICA 1 with dist: %f \n ", dist);
+          ica1 = get_tool_intersect(dist); 
+  	  tilelen = 1 << (refine_level - q->level);       
+          rad = (double)tilelen/2;
+          ica2 = asin(rad/dist) * val;
+	  ica = ica1 + ica2;
+          if (isnan(ica)){
+     	    printf(" detecting nan number for ica: 1: %f, 2: %f \n", ica1, ica2);
+	  }
+          ICA_list[ica_id] = ica; 
+	  ica_id++;
+	  if (ica >= 90) printf("note: large ica %f!!!!!\n", ica);
+	  
+	  for ( r=0; r<map_row; r++ )
+	  for ( c=0; c<map_col; c++ ){ 
+	    //sita = c * 180.0/map_col / val;
+	    //sigma = r * 360.0/map_row / val; 
+	    //vec_x = sin(sita)*cos(sigma);
+	    //vec_y = sin(sita)*sin(sigma);
+	    //vec_z = cos(sita);
+	    vec_x = rotate_vector[r][c].x;
+	    vec_y = rotate_vector[r][c].y;
+	    vec_z = rotate_vector[r][c].z;
+	    temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z)/dist;
+	    angle = acos(temp) * val;
+	    if ( angle <= ica ) map[r][c] = 1;
+	  } 
+
+	  /*
+	  sita = acos( offsk/dist ) * val;
+	  sigma = atan( offsj/offsi ) * val;
+
+	  if (sita - ica < 0){
+	    mark_angle_range(0, sita+ica, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
+	  } 
+	  else if (sita + ica > 180){
+	    mark_angle_range(sita-ica, 180-sita_unit, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
+	  } else {
+	    v_sig = asin( sin(ica/val)/sin(sita/val) ) * val;
+	    if (sigma-v_sig < 0 || sigma+v_sig >= 360)
+	      mark_angle_range(sita-ica, sita+ica, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
+	    else
+	      mark_angle_range(sita-ica, sita+ica, sigma-v_sig, sigma+v_sig, offsi, offsj, offsk, dist, ica);
+	  }
+	  */
+
+	  /*
+	  if (start_angle < 0 || end_angle > 180){
+	  for ( r=0; r<map_row; r++ )
+	  for ( c=0; c<map_col; c++ ){ 
+	    //sita = c * 180.0/map_col / val;
+	    //sigma = r * 360.0/map_row / val; 
+	    //vec_x = sin(sita)*cos(sigma);
+	    //vec_y = sin(sita)*sin(sigma);
+	    //vec_z = cos(sita);
+	    vec_x = rotate_vector[r][c].x;
+	    vec_y = rotate_vector[r][c].y;
+	    vec_z = rotate_vector[r][c].z;
+	    temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z)/dist;
+	    angle = acos(temp) * val;
+	    if ( angle <= ica ) map[r][c] = 1;
+	  }
+	  } else {
+	    v_sig = asin( sin(ica/val)/sin(sita/val) ) * val;
+	    //printf(" two angles cal: %f, ica %f \n ", v_sig, ica );
+	    //v_sig = asin( (ica/360.0)/sin(sita/val) ) * val;
+	    if (sigma-v_sig < 0 || sigma+v_sig >= 360)
+	      mark_angle_range(start_angle, end_angle, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
+	    else
+	      mark_angle_range(start_angle, end_angle, sigma-v_sig, sigma+v_sig, offsi, offsj, offsk, dist, ica);
+	  }
+	  */
+	  
+          //if (ica_id % 10000 == 0) printf("progress %d \n", ica_id); 
+	  }
+          s += array->elem_size;
+        }
+        printf(" finish generating ICA list ! %d %d\n ", ica_id, myc);
+	for (i=0; i<myc; i++){
+          //if (isnan(ICA_list[i]))
+          if (ICA_list[i] >= 360.0)
+	  printf("360 element: %f ", ICA_list[i]);
+	}
+	//printf("\nend ica list two counts: %d %d\n", ica_id, myc);
+        printf(" finished calculating the access map \n");
+}
+
 // note that the coordinates should be normalized
 void mark_accessibility_map(p4est_t *p4est, int x, int y, int z){
         sc_array_t *quads;
@@ -428,7 +678,7 @@ gettimeofday(&t2, NULL);
 	for (i=0; i<myc; i++){
           //if (isnan(ICA_list[i]))
           if (ICA_list[i] >= 360.0)
-	  printf("%f ", ICA_list[i]);
+	  printf("360 element: %f ", ICA_list[i]);
 	}
 	//printf("\nend ica list two counts: %d %d\n", ica_id, myc);
 
@@ -1134,6 +1384,7 @@ tool_r[4] = 0.79375;
 
   printf("start now ... offset\n");
 
+  initialize_rotate_vector();
   p4est_refine (p4est1, 1, refine_sphere1, NULL);
   // ======>  used to test cut layer by layer 
   //test_array2 = initialize_array(cube_len);
@@ -1156,11 +1407,12 @@ tool_r[4] = 0.79375;
   //path_offset(test_array1, 19, 10, cube_len); 
 
 gettimeofday(&t1, NULL);
-  mark_accessibility_map(p4est1, 128, 128, 255);
+  //mark_accessibility_map(p4est1, 128, 128, 255);
+  mark_map(p4est1, 128, 128, 255);
 gettimeofday(&t2, NULL);
   elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
   elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
-  printf(" >>>>>>>  operation p4est accessMap elapsedTime %f  ms.\n", elapsedTime);
+  printf(" ===========  >>>>>>>>>>>  operation p4est accessMap elapsedTime %f  ms.\n", elapsedTime);
 
   print_map();
   //check_data_fields(p4est_out);
