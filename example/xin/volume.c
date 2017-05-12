@@ -86,12 +86,21 @@ typedef struct
 }
 Point3d;
 
+typedef struct
+{
+  double         a;
+  double         b;
+  double         c;
+  double         k;
+}
+Plane;
+
+
 
 int*** test_array1;
 int*** test_array2;
 int cube_len = -1;
 int sk_level = 4;
-
 int print_sign = 0;
 
 // tool configurations
@@ -102,10 +111,12 @@ double tool_length = 0;
 double val = 180.0/PI;
 int map_row = 64;
 int map_col = 128;
-//int map_row = 4;
-//int map_col = 8;
-int** map;
+//int map_row = 128;
+//int map_col = 256;
+int** access_map1;
+int** access_map2;
 Point3d **rotate_vector;
+int check_sign = 0;
 
 
 static int
@@ -373,20 +384,15 @@ void initialize_rotate_vector(){
 	    rotate_vector[i][j].y = sin(sita)*sin(sigma);
 	    rotate_vector[i][j].z = cos(sita);
 	}
-	//for (i=0; i<map_row; i++){
-	//  for (j=0; j<map_col; j++)
-	//    printf("(%f, %f, %f), ", rotate_vector[i][j].x, rotate_vector[i][j].y, rotate_vector[i][j].z); 
-	//  printf("\n");
-	//}
 }
 
 void mark_angle_range(double sita1, double sita2, double sigma1, double sigma2, 
-		double offsi, double offsj, double offsk, double dist, double ica){
+		double offsi, double offsj, double offsk, double vk, int** access_map){
 	double sita, sigma;
 	double vec_x, vec_y, vec_z;
-	double vk, temp;
 	double sita_unit = 180.0/(double)map_col;
 	double sigma_unit = 360.0/(double)map_row;
+	double temp;
 	int rid, cid;
 	int cid1, cid2;
 	int rid1, rid2;
@@ -402,7 +408,6 @@ void mark_angle_range(double sita1, double sita2, double sigma1, double sigma2,
 	else rid1 = rid + 1;
 	rid2 = (int)(sigma2/sigma_unit);
 
-	vk = cos(ica/val);
 	for ( c=cid1; c<=cid2; c++ )
 	for ( r=rid1; r<=rid2; r++ ){ 
           rt = r;
@@ -420,14 +425,92 @@ void mark_angle_range(double sita1, double sita2, double sigma1, double sigma2,
 	  vec_x = rotate_vector[rt][ct].x;
 	  vec_y = rotate_vector[rt][ct].y;
 	  vec_z = rotate_vector[rt][ct].z;
-	  temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z)/dist;
+	  temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z);
 	  //angle = acos(temp) * val;
-	  if ( map[rt][ct]==0 && temp>=vk ){
-	    map[rt][ct] = 1;
+	  if ( access_map[rt][ct]==0 && temp>=vk ){
+	    access_map[rt][ct] = 1;
+	    //if (check_sign > 0)
+	    //printf(" ======>>>>> check plane id %d\n", check_sign);
 	    //printf(" ======>>>>> check %f angle %f, ==== %f ica is %f\n", temp, angle, vk, ica);
 	  }
 	} 
 	//printf("end \n");
+}
+
+void mark_plane(double offsi, double offsj, double offsk, double ica, int** access_map){
+	double sita, sigma;
+	double vk, v_sig;
+	double sita_unit = 180.0/(double)map_col;
+	double sigma_unit = 360.0/(double)map_row;
+
+	sita = acos( offsk ) * val;
+	sigma = atan( offsj/offsi ) * val;
+	vk = cos(ica/val);
+
+	if (sita - ica < 0){
+	  mark_angle_range(0, sita+ica, 0, 360-sigma_unit, offsi, offsj, offsk, vk, access_map);
+	} 
+	else if (sita + ica > 180){
+	  mark_angle_range(sita-ica, 180-sita_unit, 0, 360-sigma_unit, offsi, offsj, offsk, vk, access_map);
+	} else {
+	  v_sig = asin( sin(ica/val)/sin(sita/val) ) * val;
+	  if (sigma-v_sig < 0 || sigma+v_sig >= 360)
+	    mark_angle_range(sita-ica, sita+ica, 0, 360-sigma_unit, offsi, offsj, offsk, vk, access_map);
+	  else
+	    mark_angle_range(sita-ica, sita+ica, sigma-v_sig, sigma+v_sig, offsi, offsj, offsk, vk, access_map);
+	}
+}
+
+void planes_reduction(Plane* p_list, int* removed_list, int size){
+	int mp = -1;
+	int i;
+	int reduced = 0;
+	double x, y, z;
+	double x0, y0, z0, k0;
+	double x1, y1, z1, k1;
+	double vk, dist;
+	double min_d = 1.1;
+	double temp, tr;
+	double v1, v2, v3;
+
+	for (i=0; i<size; i++){
+	  x = p_list[i].a; 
+	  y = p_list[i].b; 
+	  z = p_list[i].c; 
+	  vk = cos((p_list[i].k)/val);
+	  if (vk < 0) vk = -1*vk;
+	  dist = vk / sqrt(x*x + y*y + z*z); 
+	  if (dist > 1) printf(" ******  this plane is wrong ******  !!!\n ");
+	  if (dist < min_d){
+	    mp = i;
+	    min_d = dist;
+	  }
+	}
+
+	x0 = p_list[mp].a;
+	y0 = p_list[mp].b;
+	z0 = p_list[mp].c;
+	k0 = cos((p_list[mp].k)/val);
+
+	printf(" the chosen plane (%f, %f, %f, %f), dist: %f !!!\n", x0, y0, z0, k0, min_d );
+
+	for (i=0; i<size; i++){
+	  x1 = p_list[i].a; 
+	  y1 = p_list[i].b; 
+	  z1 = p_list[i].c; 
+	  k1 = cos((p_list[i].k)/val);
+	  temp = sqrt( (y0*z1-z0*y1)*(y0*z1-z0*y1) + (z0*x1-x0*z1)*(z0*x1-x0*z1) + (x0*y1-y0*x1)*(x0*y1-y0*x1) );
+	  v1 = k0*x1 - k1*x0;
+	  v2 = k0*y1 - k1*y0;
+	  v3 = k0*z1 - k1*z0;
+	  tr = sqrt(v1*v1 + v2*v2 + v3*v3)/temp; 
+	  //printf(" this plance is wrong, (%f, %f, %f, %f), line dist: %f !!!\n", x, y, z, vk, tr);
+	  if (tr > 1.0) {
+	    reduced++;
+	    removed_list[i] = 1;
+	  }
+	}
+	printf(" ====>>>>>  the number of reduced planes: %d in total size: %d !!!!!\n", reduced, size);
 }
 
 void mark_map(p4est_t *p4est, int x, int y, int z){
@@ -453,15 +536,13 @@ void mark_map(p4est_t *p4est, int x, int y, int z){
 	int rid, rid1, rid2;
 	int c, r, ct, rt;
 	double x1, x2, y1, y2;
-	double sita_unit = 180.0/(double)map_col;
-	double sigma_unit = 360.0/(double)map_row;
 
 	double vec_x, vec_y, vec_z;
         double temp, angle, ica_angle;
-	double start_angle, end_angle, angle1;
 	double *ICA_list;
-	double radS, v_sig, vk;
 	char *s;
+	Plane *plane_list;
+	int *removed_list;
 	
         unit_len = P4EST_QUADRANT_LEN (refine_level);
         tree = p4est_tree_array_index(p4est->trees, 0);
@@ -487,14 +568,22 @@ gettimeofday(&t2, NULL);
 
 	// initialize the accessibility map
 	// initialize the map as accessible (0)
-	map = (int **)malloc(map_row * sizeof(int *));
+	access_map1 = (int **)malloc(map_row * sizeof(int *));
         for (i=0; i<map_row; i++)
-	  map[i] = (int*) malloc(map_col * sizeof(int));
+	  access_map1[i] = (int*) malloc(map_col * sizeof(int));
+	access_map2 = (int **)malloc(map_row * sizeof(int *));
+        for (i=0; i<map_row; i++)
+	  access_map2[i] = (int*) malloc(map_col * sizeof(int));
+
 	for (i=0; i<map_row; i++)
 	for (j=0; j<map_col; j++){
-	  map[i][j] = 0;
+	  access_map1[i][j] = 0;
+	  access_map2[i][j] = 0;
 	}
 	
+	
+	plane_list = (Plane *)malloc(myc*sizeof(Plane));
+	removed_list = (int*) malloc(myc*sizeof(int));
 	// initialize ICA list
         elem_size = (int) array->elem_count;
         ICA_list = malloc( myc*sizeof(double) );
@@ -510,6 +599,9 @@ gettimeofday(&t2, NULL);
 	  offsj = (double)(q->y) / unit_len + 0.5 - y;       /* Pixel y offset */
 	  offsk = (double)(q->z) / unit_len + 0.5 - z;       /* Pixel z offset */
           dist = sqrt(offsi*offsi + offsj*offsj + offsk*offsk);
+	  offsi = offsi/dist;
+	  offsj = offsj/dist;
+	  offsk = offsk/dist;
           //printf(" start calculating ICA 1 with dist: %f \n ", dist);
           ica1 = get_tool_intersect(dist); 
   	  tilelen = 1 << (refine_level - q->level);       
@@ -520,9 +612,9 @@ gettimeofday(&t2, NULL);
      	    printf(" detecting nan number for ica: 1: %f, 2: %f \n", ica1, ica2);
 	  }
           ICA_list[ica_id] = ica; 
-	  ica_id++;
 	  if (ica >= 90) printf("note: large ica %f!!!!!\n", ica);
 	  
+	  /*
 	  for ( r=0; r<map_row; r++ )
 	  for ( c=0; c<map_col; c++ ){ 
 	    //sita = c * 180.0/map_col / val;
@@ -533,57 +625,17 @@ gettimeofday(&t2, NULL);
 	    vec_x = rotate_vector[r][c].x;
 	    vec_y = rotate_vector[r][c].y;
 	    vec_z = rotate_vector[r][c].z;
-	    temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z)/dist;
+	    temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z);
 	    angle = acos(temp) * val;
-	    if ( angle <= ica ) map[r][c] = 1;
+	    if ( angle <= ica ) access_map1[r][c] = 1;
 	  } 
-
-	  /*
-	  sita = acos( offsk/dist ) * val;
-	  sigma = atan( offsj/offsi ) * val;
-
-	  if (sita - ica < 0){
-	    mark_angle_range(0, sita+ica, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
-	  } 
-	  else if (sita + ica > 180){
-	    mark_angle_range(sita-ica, 180-sita_unit, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
-	  } else {
-	    v_sig = asin( sin(ica/val)/sin(sita/val) ) * val;
-	    if (sigma-v_sig < 0 || sigma+v_sig >= 360)
-	      mark_angle_range(sita-ica, sita+ica, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
-	    else
-	      mark_angle_range(sita-ica, sita+ica, sigma-v_sig, sigma+v_sig, offsi, offsj, offsk, dist, ica);
-	  }
 	  */
-
-	  /*
-	  if (start_angle < 0 || end_angle > 180){
-	  for ( r=0; r<map_row; r++ )
-	  for ( c=0; c<map_col; c++ ){ 
-	    //sita = c * 180.0/map_col / val;
-	    //sigma = r * 360.0/map_row / val; 
-	    //vec_x = sin(sita)*cos(sigma);
-	    //vec_y = sin(sita)*sin(sigma);
-	    //vec_z = cos(sita);
-	    vec_x = rotate_vector[r][c].x;
-	    vec_y = rotate_vector[r][c].y;
-	    vec_z = rotate_vector[r][c].z;
-	    temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z)/dist;
-	    angle = acos(temp) * val;
-	    if ( angle <= ica ) map[r][c] = 1;
-	  }
-	  } else {
-	    v_sig = asin( sin(ica/val)/sin(sita/val) ) * val;
-	    //printf(" two angles cal: %f, ica %f \n ", v_sig, ica );
-	    //v_sig = asin( (ica/360.0)/sin(sita/val) ) * val;
-	    if (sigma-v_sig < 0 || sigma+v_sig >= 360)
-	      mark_angle_range(start_angle, end_angle, 0, 360-sigma_unit, offsi, offsj, offsk, dist, ica);
-	    else
-	      mark_angle_range(start_angle, end_angle, sigma-v_sig, sigma+v_sig, offsi, offsj, offsk, dist, ica);
-	  }
-	  */
-	  
-          //if (ica_id % 10000 == 0) printf("progress %d \n", ica_id); 
+	  plane_list[ica_id].a = offsi; 
+	  plane_list[ica_id].b = offsj; 
+	  plane_list[ica_id].c = offsk; 
+	  plane_list[ica_id].k = ica; 
+	  removed_list[ica_id] = 0;
+	  ica_id++;
 	  }
           s += array->elem_size;
         }
@@ -593,6 +645,18 @@ gettimeofday(&t2, NULL);
           if (ICA_list[i] >= 360.0)
 	  printf("360 element: %f ", ICA_list[i]);
 	}
+	
+	planes_reduction(plane_list, removed_list, myc);
+	for (i=0; i<myc; i++){
+	  offsi = plane_list[i].a; 
+	  offsj = plane_list[i].b; 
+	  offsk = plane_list[i].c; 
+	  ica = plane_list[i].k;
+	  //mark_plane(offsi, offsj, offsk, ica, access_map1);
+	  if (removed_list[i] == 0)
+	  mark_plane(offsi, offsj, offsk, ica, access_map2);
+ 	}
+
 	//printf("\nend ica list two counts: %d %d\n", ica_id, myc);
         printf(" finished calculating the access map \n");
 }
@@ -682,13 +746,13 @@ gettimeofday(&t2, NULL);
 	}
 	//printf("\nend ica list two counts: %d %d\n", ica_id, myc);
 
-	map = (int **)malloc(map_row * sizeof(int *));
+	access_map1 = (int **)malloc(map_row * sizeof(int *));
         for (i=0; i<map_row; i++)
-	  map[i] = (int*) malloc(map_col * sizeof(int));
+	  access_map1[i] = (int*) malloc(map_col * sizeof(int));
 	// initialize the map as accessible (0)
 	for (i=0; i<map_row; i++)
 	for (j=0; j<map_col; j++){
-	  map[i][j] = 0;
+	  access_map1[i][j] = 0;
 	}
 
         for ( i=0; i<map_row; i++ ){
@@ -718,7 +782,7 @@ gettimeofday(&t2, NULL);
  	    //}
             if (angle <= ica_angle){
               //printf ("check,");
-	      map[i][j] = 1;
+	      access_map1[i][j] = 1;
 	      break;
             }  
 	    }
@@ -726,22 +790,37 @@ gettimeofday(&t2, NULL);
             s += array->elem_size;
           }
 	}
-          printf(" progress i: %d, j: %d \n", i, j );
+          //printf(" progress i: %d, j: %d \n", i, j );
 	}
         printf(" finished calculating the access map \n");
 }
 
-void print_map(){
+void print_map(int** access_map){
   int i, j;
   for (i=0; i<map_row; i++){
     for (j=0; j<map_col; j++){
-      printf("%d", map[i][j]);
+      printf("%d", access_map[i][j]);
       //if (map[i][j] == 1) printf("a");
     }
     printf("\n");
   }
 }
 
+void compare_map(){
+  int i, j;
+  int sign = 0;
+  for (i=0; i<map_row; i++){
+    for (j=0; j<map_col; j++){
+      if (access_map1[i][j] != access_map2[i][j]){
+        printf(" found difference (%d, %d) %d %d !!!!\n", i, j, access_map1[i][j], access_map2[i][j]);
+	sign = 1;
+      }
+      //if (map[i][j] == 1) printf("a");
+    }
+  }
+  if (sign == 0)
+    printf(" \n0000000000000000000000 => successfully pass the comparison !!!!! \n\n" );
+}
 
 int
 refine_offset (p4est_t * p4est, p4est_topidx_t which_tree,
@@ -1414,7 +1493,8 @@ gettimeofday(&t2, NULL);
   elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
   printf(" ===========  >>>>>>>>>>>  operation p4est accessMap elapsedTime %f  ms.\n", elapsedTime);
 
-  print_map();
+  print_map(access_map2);
+  //compare_map();
   //check_data_fields(p4est_out);
   //check_data_fields(p4est1);
  
