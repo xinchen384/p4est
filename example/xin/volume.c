@@ -109,10 +109,10 @@ double tool_r[5];
 int tool_pieces = 5;
 double tool_length = 0;
 double val = 180.0/PI;
-int map_row = 64;
-int map_col = 128;
-//int map_row = 128;
-//int map_col = 256;
+//int map_row = 64;
+//int map_col = 128;
+int map_row = 128;
+int map_col = 256;
 int** access_map1;
 int** access_map2;
 Point3d **rotate_vector;
@@ -427,7 +427,8 @@ void mark_angle_range(double sita1, double sita2, double sigma1, double sigma2,
 	  vec_z = rotate_vector[rt][ct].z;
 	  temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z);
 	  //angle = acos(temp) * val;
-	  if ( access_map[rt][ct]==0 && temp>=vk ){
+	  //if ( access_map[rt][ct]==0 && temp>=vk ){
+	  if ( temp>=vk && access_map[rt][ct]==0){
 	    access_map[rt][ct] = 1;
 	    //if (check_sign > 0)
 	    //printf(" ======>>>>> check plane id %d\n", check_sign);
@@ -461,6 +462,484 @@ void mark_plane(double offsi, double offsj, double offsk, double ica, int** acce
 	}
 }
 
+double distance_plane(Plane plane){
+	double x, y, z;
+	double vk, dist;
+	x = plane.a; 
+	y = plane.b; 
+	z = plane.c; 
+	vk = plane.k;
+	if (vk < 0) vk = -1*vk;
+	dist = vk / sqrt(x*x + y*y + z*z); 
+	if (dist > 1) printf(" ******  this plane is wrong ******  !!!\n ");
+	return dist;
+}
+
+int cross_plane(Plane p1, Plane p2){
+	double x0, y0, z0, k0;
+	double x1, y1, z1, k1;
+	double temp;
+	double v1, v2, v3, tr;
+	x0 = p1.a; 
+	y0 = p1.b; 
+	z0 = p1.c; 
+	k0 = p1.k;
+
+	x1 = p2.a; 
+	y1 = p2.b; 
+	z1 = p2.c; 
+	k1 = p2.k;
+	if (x1 == x0 && y1 == y0 && z1 == z0 && k1 == k0){ 
+	  return -1; 
+	}
+	else { 
+	  temp = sqrt( (y0*z1-z0*y1)*(y0*z1-z0*y1) + (z0*x1-x0*z1)*(z0*x1-x0*z1) + (x0*y1-y0*x1)*(x0*y1-y0*x1) );
+	  v1 = k0*x1 - k1*x0;
+	  v2 = k0*y1 - k1*y0;
+	  v3 = k0*z1 - k1*z0;
+	  tr = sqrt(v1*v1 + v2*v2 + v3*v3)/temp; 
+	  //printf(" this plance is wrong, (%f, %f, %f, %f), line dist: %f !!!\n", x, y, z, vk, tr);
+	  if (tr > 1.0) 
+	    return 0;
+	  else
+	    return 1;	
+	}
+}
+
+int check_plane_cross(Plane* p_list, int size){
+	int i, j;
+	for (i=0; i<size; i++)
+	for (j=i+1; j<size; j++){
+	  if( cross_plane(p_list[i], p_list[j]) != 1 ) return 0;
+	}
+	return 1;
+}
+
+//based on the distance from plane to the original point(0, 0, 0), return the closest plane
+int closest_plane(Plane* p_list, int size){
+	int i;
+	double x, y, z;
+	double vk, dist;
+	double min_d = 1.1;
+	int mp = -1;
+
+	for (i=0; i<size; i++){
+	  x = p_list[i].a; 
+	  y = p_list[i].b; 
+	  z = p_list[i].c; 
+	  vk = p_list[i].k;
+	  if (vk < 0) vk = -1*vk;
+	  dist = vk / sqrt(x*x + y*y + z*z); 
+	  if (dist > 1) printf(" ******  this plane is wrong ******  !!!\n ");
+	  if (dist < min_d){
+	    mp = i;
+	    min_d = dist;
+	  }
+	}
+	if (mp == -1){
+	  printf("calculating the closest plane captures error!!!!\n");
+	}
+	printf(" the chosen plane id %d, dist: %f !!!\n", mp, min_d );
+	return mp;
+}
+
+void sort_test(int* array, int size, int id){
+	int i, t;
+	int pid = size;
+	int p_temp = array[id];
+
+	//int dt = array[pid];
+	//while (p_temp > dt && pid < size){
+	//  pid++;
+	//  dt = array[pid];
+	//}
+	for (i=0; i<size; i++){
+	  if (i!=id){
+	    if (p_temp <= array[i]){
+	      pid = i;
+	      break;
+	    }
+	  }
+	}
+	printf(" the position found is %d, placed id %d \n", pid, id);
+	if (pid == size) return;
+	if (pid < id){
+	  t = id;
+	  while ( t > pid ){
+	    *(array+t) = *(array+t-1);
+	    t--;
+	  }
+	}
+	if (pid > id){
+	  t = id;
+	  // id is on pid's left, the actual position move left by one
+	  pid--;
+	  while ( t < pid ){
+	    *(array+t) = *(array+t+1);
+	    t++;
+	  }
+	}
+	if (pid != id)
+	  *(array+pid) = p_temp;
+}
+ 
+int sss = 0;
+
+//according to the distance of plane sort the list in ascending order, 
+//id represents the only element that needs to sort out
+void sort_planes(Plane* p_list, int size, int id){
+	int i, t;
+	double dist, dt, temp;
+	Plane p_temp;
+	int pid = size;
+	//double xt, yt, zt, kt;
+	//xt = p_list[id].a;	
+	//yt = p_list[id].b;	
+	//zt = p_list[id].c;	
+	//kt = p_list[id].k;	
+	p_temp = p_list[id];
+
+	dist = distance_plane(p_list[id]);
+	for (i=0; i<size; i++){
+	  if (i!=id){
+	    dt = distance_plane(p_list[i]);
+	    if (dist <= dt){
+	      pid = i;
+	      break;
+	    }
+	  }
+	}
+	if (pid == size) return;
+
+	//printf(" original id: %d the position found is %d \n", id, pid);
+	//if (sss<100)
+	//if (dist<0.5)
+	//if (dist<0.5&&sss<10)
+	if (0)
+	{
+	printf("\nnew plane [%f, %f, %f, %f (%f)], ", p_list[id].a, p_list[id].b, p_list[id].c, p_list[id].k, distance_plane(p_list[id]));
+	printf("replaced plane [%f, %f, %f, %f (%f)]\n ", p_list[pid].a, p_list[pid].b, p_list[pid].c, p_list[pid].k, distance_plane(p_list[pid]));
+
+	printf("checking the sort planes after with id %d: ", id);
+	for (i=0; i<size; i++){
+	  temp = distance_plane(p_list[i]);
+	  printf("%f, ", temp);
+	}
+	printf("\n");
+	sss++;
+	}
+
+	if (pid < id){
+	  t = id;
+	  while ( t > pid ){
+	    //p_list[t].a = p_list[t-1].a;
+            //p_list[t].b = p_list[t-1].b;
+            //p_list[t].c = p_list[t-1].c;
+            //p_list[t].k = p_list[t-1].k;
+	    *(p_list+t) = *(p_list+t-1);
+	    t--; 
+	  }
+	}
+	if (pid > id){
+	  t = id;
+	  pid--;
+	  while ( t < pid ){
+	    //p_list[t].a = p_list[t+1].a;
+            //p_list[t].b = p_list[t+1].b;
+            //p_list[t].c = p_list[t+1].c;
+            //p_list[t].k = p_list[t+1].k;
+	    *(p_list+t) = *(p_list+t+1);
+	    t++;
+	  }
+	}
+	if (pid != id){
+	  //p_list[pid].a = xt;
+	  //p_list[pid].b = yt;
+	  //p_list[pid].c = zt;
+	  //p_list[pid].k = kt;
+	  *(p_list+pid) = p_temp;
+	}
+
+	//if (sss<100 )
+	//if (dist<0.5)
+	//if (dist<0.5&&sss<10)
+	if (0)
+	{
+	printf("checking the sort planes after with id %d: ", id);
+	for (i=0; i<size; i++){
+	  temp = distance_plane(p_list[i]);
+	  printf("[%f, %f, %f, %f (%f)], ", p_list[i].a, p_list[i].b, p_list[i].c, p_list[i].k, temp);
+	}
+	printf("\n\n");
+	sss++;
+	}
+	
+}
+
+// note that the size of the sort_list should be one larger than the original
+// for example, sort_list is allocated as 101, but the size_k is 100
+int sample_planes(Plane* p_list, int size, Plane* sort_list, int size_k){
+	int i, j;
+	int s = 0;
+	int crossed;
+	double x, y, z, vk;
+	double temp, dist;
+	for (i=0; i<size; i++){
+	  if (s == 0){
+	    sort_list[0].a = p_list[i].a;
+	    sort_list[0].b = p_list[i].b;
+	    sort_list[0].c = p_list[i].c;
+	    sort_list[0].k = p_list[i].k;
+	    s++;
+	  } else {
+	    for (j=0; j<s; j++){
+	      /*
+		  sort_list[s].a = p_list[i].a;
+		  sort_list[s].b = p_list[i].b;
+		  sort_list[s].c = p_list[i].c;
+		  sort_list[s].k = p_list[i].k;
+		  if (s < size_k){
+		    s++;
+		    sort_planes(sort_list, s, s-1);
+		  }
+		  else{
+		    sort_planes(sort_list, size_k+1, size_k);
+		  }
+	      */
+
+	      crossed = cross_plane(sort_list[j], p_list[i]);
+	      if ( crossed == 1 ){
+		if (j == s-1){
+		  //add to tail no matter what
+		  sort_list[s].a = p_list[i].a;
+		  sort_list[s].b = p_list[i].b;
+		  sort_list[s].c = p_list[i].c;
+		  sort_list[s].k = p_list[i].k;
+
+		  if (s < size_k){
+		    s++;
+		    sort_planes(sort_list, s, s-1);
+		  }
+		  else{
+		    sort_planes(sort_list, size_k+1, size_k);
+		  }
+		}
+	      }
+	      else if ( crossed == 0 ){
+	        if (distance_plane(p_list[i]) < distance_plane(sort_list[j])){
+		  sort_list[j].a = p_list[i].a;
+		  sort_list[j].b = p_list[i].b;
+		  sort_list[j].c = p_list[i].c;
+		  sort_list[j].k = p_list[i].k;
+
+		  sort_planes(sort_list, s, j);
+		}
+		else {
+		  // right here, we can directly mark the plane
+		  // to avoid the future redundant checking
+		  break;
+		}
+	      } else{
+		//checking the same plane
+		break;
+	      } 
+	    }	
+	  }
+	}
+	
+	return s;
+}
+
+// given a plane (xt, yt, zt, kt), mark the redundant planes in p_list 
+// what if the two planes are parallel ???
+void mark_redundant_planes(Plane* p_list, int* removed_list, int size, double xt, double yt, double zt, double kt){
+	int i;
+	int reduced = 0;
+	int sp = 0;
+	double x0, y0, z0, k0;
+	double x1, y1, z1, k1;
+	double vk, dist;
+	double temp, tr;
+	double v1, v2, v3;
+
+	x0 = xt;
+	y0 = yt;
+	z0 = zt;
+	k0 = kt;	
+	for (i=0; i<size; i++){
+	  if (removed_list[i] == 0){
+	    x1 = p_list[i].a; 
+	    y1 = p_list[i].b; 
+	    z1 = p_list[i].c; 
+	    k1 = p_list[i].k;
+	    if (x1 == x0 && y1 == y0 && z1 == z0 && k1 == k0){ sp++; }
+	    else { 
+	    temp = sqrt( (y0*z1-z0*y1)*(y0*z1-z0*y1) + (z0*x1-x0*z1)*(z0*x1-x0*z1) + (x0*y1-y0*x1)*(x0*y1-y0*x1) );
+	    v1 = k0*x1 - k1*x0;
+	    v2 = k0*y1 - k1*y0;
+	    v3 = k0*z1 - k1*z0;
+	    tr = sqrt(v1*v1 + v2*v2 + v3*v3)/temp; 
+	    //printf(" this plance is wrong, (%f, %f, %f, %f), line dist: %f !!!\n", x, y, z, vk, tr);
+	    if (tr > 1.0) {
+	      reduced++;
+	      removed_list[i] = 1;
+	    }
+	    }
+	  }
+	}
+	if (sp != 1){
+	  printf(" multiple or no original plane (%d) is detected ===>>>> error!!!! \n ", sp);
+	}
+	printf(" >>>>>>>  # reduced planes: %d from: %d, using plane (%f, %f, %f, %f) !!!!!\n", reduced, size, xt, yt, zt, kt);
+}
+
+//given a normal vector, divide all other vectors into 4 areas based on moved x,y
+//then choose the closes vector in each area
+void one_to_four_plane(Plane* p_list, int* removed_list, int size, double xt, double yt, double zt){
+	int i;
+	int mp = -1;
+	double x, y, z, vk;
+	double x0, y0, z0, k0;
+	Plane *p1_list, *p2_list, *p3_list, *p4_list;
+	int size1, size2, size3, size4;
+	int k1=0, k2=0, k3=0, k4=0;
+	size1 = 0;
+	size2 = 0;
+	size3 = 0;
+	size4 = 0;
+
+	for (i=0; i<size; i++){
+	  if (removed_list[i]==0){
+	    x = p_list[i].a; 
+	    y = p_list[i].b; 
+	    z = p_list[i].c; 
+	    vk = p_list[i].k;
+	    if ( x-xt >= 0 && y-yt >= 0){
+	      size1++;
+	    }
+	    else if( x-xt >= 0 && y-yt < 0){
+	      size2++;
+	    }
+	    else if( x-xt < 0 && y-yt <= 0){
+	      size3++;
+	    }
+	    else if( x-xt <= 0 && y-yt > 0){
+	      size4++;
+	    } 
+	    else{
+	      printf(" unpredicted, plz check normal vector (%f, %f, %f) ~!!!!!\n", x, y, z);
+	    }
+	  }
+	}
+	printf(" total size of planes %d is divided into: (%d, %d, %d, %d)=%d !\n", size, size1, size2, size3, size4, size1+size2+size3+size4); 
+	
+	p1_list = (Plane *)malloc(size1*sizeof(Plane));
+	p2_list = (Plane *)malloc(size2*sizeof(Plane));
+	p3_list = (Plane *)malloc(size3*sizeof(Plane));
+	p4_list = (Plane *)malloc(size4*sizeof(Plane));
+
+	for (i=0; i<size; i++){
+	  if (removed_list[i]==0){
+	    x = p_list[i].a; 
+	    y = p_list[i].b; 
+	    z = p_list[i].c; 
+	    vk = p_list[i].k;
+	    if ( x-xt >= 0 && y-yt >= 0){
+	      p1_list[k1].a = x;
+	      p1_list[k1].b = y;
+	      p1_list[k1].c = z;
+	      p1_list[k1].k = vk;
+	      k1++;
+	    }
+	    else if( x-xt >= 0 && y-yt < 0){
+	      p2_list[k2].a = x;
+	      p2_list[k2].b = y;
+	      p2_list[k2].c = z;
+	      p2_list[k2].k = vk;
+	      k2++;
+	    }
+	    else if( x-xt < 0 && y-yt <= 0){
+	      p3_list[k3].a = x;
+	      p3_list[k3].b = y;
+	      p3_list[k3].c = z;
+	      p3_list[k3].k = vk;
+	      k3++;
+	    }
+	    else if( x-xt <= 0 && y-yt > 0){
+	      p4_list[k4].a = x;
+	      p4_list[k4].b = y;
+	      p4_list[k4].c = z;
+	      p4_list[k4].k = vk;
+	      k4++;
+	    } 
+	    else{
+	      printf(" unpredicted, plz check normal vector (%f, %f, %f) ~!!!!!\n", x, y, z);
+	    }
+	  }
+	}
+
+	mp = closest_plane(p1_list, size1); 
+	x0 = p1_list[mp].a;
+	y0 = p1_list[mp].b;
+	z0 = p1_list[mp].c;
+	k0 = p1_list[mp].k;
+	printf(" doing the second one ====>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> redundant planes !!!!\n");
+	mark_redundant_planes(p_list, removed_list, size, x0, y0, z0, k0);
+
+	mp = closest_plane(p2_list, size2); 
+	x0 = p2_list[mp].a;
+	y0 = p2_list[mp].b;
+	z0 = p2_list[mp].c;
+	k0 = p2_list[mp].k;
+	mark_redundant_planes(p_list, removed_list, size, x0, y0, z0, k0);
+
+	mp = closest_plane(p3_list, size3); 
+	x0 = p3_list[mp].a;
+	y0 = p3_list[mp].b;
+	z0 = p3_list[mp].c;
+	k0 = p3_list[mp].k;
+	mark_redundant_planes(p_list, removed_list, size, x0, y0, z0, k0);
+
+	mp = closest_plane(p4_list, size4); 
+	x0 = p4_list[mp].a;
+	y0 = p4_list[mp].b;
+	z0 = p4_list[mp].c;
+	k0 = p4_list[mp].k;
+	mark_redundant_planes(p_list, removed_list, size, x0, y0, z0, k0);
+
+	free(p1_list);
+	free(p2_list);
+	free(p3_list);
+	free(p4_list);
+}
+
+
+
+void new_alg_reduction(Plane* p_list, int* removed_list, int size){
+	Plane* sort_list;
+	int k=100;
+	int actual_num;
+	int i;
+	double x, y, z, vk;
+	double dist;
+
+	sort_list = (Plane*)malloc((k+1)*sizeof(Plane));	
+ 	actual_num = sample_planes(p_list, size, sort_list, k);
+	for (i=0; i<actual_num; i++){
+	  x = sort_list[i].a; 
+	  y = sort_list[i].b; 
+	  z = sort_list[i].c; 
+	  vk = sort_list[i].k;
+	  dist = distance_plane(sort_list[i]);
+	  printf("the sampled plane: %f, %f, %f, %f with dist: %f\n", x, y, z, vk, dist);
+	}
+	if(check_plane_cross(sort_list, k) == 0){
+	  printf(" there is redundance in the sampled planes, alg needs debug!!!!!\n");
+	}else
+	  printf(" all samples planes are crossed, passed !!!!!\n");
+		
+}
+
 void planes_reduction(Plane* p_list, int* removed_list, int size){
 	int mp = -1;
 	int i;
@@ -473,11 +952,13 @@ void planes_reduction(Plane* p_list, int* removed_list, int size){
 	double temp, tr;
 	double v1, v2, v3;
 
+	/*
 	for (i=0; i<size; i++){
 	  x = p_list[i].a; 
 	  y = p_list[i].b; 
 	  z = p_list[i].c; 
-	  vk = cos((p_list[i].k)/val);
+	  //vk = cos((p_list[i].k)/val);
+	  vk = p_list[i].k;
 	  if (vk < 0) vk = -1*vk;
 	  dist = vk / sqrt(x*x + y*y + z*z); 
 	  if (dist > 1) printf(" ******  this plane is wrong ******  !!!\n ");
@@ -486,19 +967,22 @@ void planes_reduction(Plane* p_list, int* removed_list, int size){
 	    min_d = dist;
 	  }
 	}
-
+	//printf(" the chosen plane id %d (%f, %f, %f, %f), dist: %f !!!\n", mp, x0, y0, z0, k0, min_d );
+	printf(" the chosen plane id %d, dist: %f !!!\n", mp, min_d );
+	*/
+	mp = closest_plane(p_list, size); 
 	x0 = p_list[mp].a;
 	y0 = p_list[mp].b;
 	z0 = p_list[mp].c;
-	k0 = cos((p_list[mp].k)/val);
+	k0 = p_list[mp].k;
 
-	printf(" the chosen plane (%f, %f, %f, %f), dist: %f !!!\n", x0, y0, z0, k0, min_d );
-
+	/*
 	for (i=0; i<size; i++){
 	  x1 = p_list[i].a; 
 	  y1 = p_list[i].b; 
 	  z1 = p_list[i].c; 
-	  k1 = cos((p_list[i].k)/val);
+	  //k1 = cos((p_list[i].k)/val);
+	  k1 = p_list[i].k;
 	  temp = sqrt( (y0*z1-z0*y1)*(y0*z1-z0*y1) + (z0*x1-x0*z1)*(z0*x1-x0*z1) + (x0*y1-y0*x1)*(x0*y1-y0*x1) );
 	  v1 = k0*x1 - k1*x0;
 	  v2 = k0*y1 - k1*y0;
@@ -511,6 +995,13 @@ void planes_reduction(Plane* p_list, int* removed_list, int size){
 	  }
 	}
 	printf(" ====>>>>>  the number of reduced planes: %d in total size: %d !!!!!\n", reduced, size);
+	*/
+	mark_redundant_planes(p_list, removed_list, size, x0, y0, z0, k0); 	
+	one_to_four_plane(p_list, removed_list, size, x0, y0, z0);
+	if (removed_list[mp] == 1){
+	  printf("the original panel is deleted, Be careful!!!!\n");
+	}
+	//removed_list[mp] = 0;
 }
 
 void mark_map(p4est_t *p4est, int x, int y, int z){
@@ -526,6 +1017,7 @@ void mark_map(p4est_t *p4est, int x, int y, int z){
         int myc;
 	int tilelen;
 	int ica_id;
+	int count;
 
   	double offsi, offsj, offsk, radius;
 	double rad, dist;
@@ -581,12 +1073,11 @@ gettimeofday(&t2, NULL);
 	  access_map2[i][j] = 0;
 	}
 	
-	
 	plane_list = (Plane *)malloc(myc*sizeof(Plane));
 	removed_list = (int*) malloc(myc*sizeof(int));
 	// initialize ICA list
         elem_size = (int) array->elem_count;
-        ICA_list = malloc( myc*sizeof(double) );
+        ICA_list = (double*)malloc( myc*sizeof(double) );
 	for (i=0; i<myc; i++)
 	  ICA_list[i] = 0.0;
 	// generate ICA for each element
@@ -633,7 +1124,7 @@ gettimeofday(&t2, NULL);
 	  plane_list[ica_id].a = offsi; 
 	  plane_list[ica_id].b = offsj; 
 	  plane_list[ica_id].c = offsk; 
-	  plane_list[ica_id].k = ica; 
+	  plane_list[ica_id].k = cos(ica/val); 
 	  removed_list[ica_id] = 0;
 	  ica_id++;
 	  }
@@ -647,18 +1138,27 @@ gettimeofday(&t2, NULL);
 	}
 	
 	planes_reduction(plane_list, removed_list, myc);
+	new_alg_reduction(plane_list, removed_list, myc);
+	printf("testing the new alg!!!\n");
+	count = 0;
 	for (i=0; i<myc; i++){
 	  offsi = plane_list[i].a; 
 	  offsj = plane_list[i].b; 
 	  offsk = plane_list[i].c; 
-	  ica = plane_list[i].k;
-	  //mark_plane(offsi, offsj, offsk, ica, access_map1);
+	  ica = acos(plane_list[i].k)*val;
+	  mark_plane(offsi, offsj, offsk, ica, access_map1);
 	  if (removed_list[i] == 0)
+          { 
 	  mark_plane(offsi, offsj, offsk, ica, access_map2);
+	  count++; 
+	  }
  	}
 
 	//printf("\nend ica list two counts: %d %d\n", ica_id, myc);
-        printf(" finished calculating the access map \n");
+        printf(" finished calculating the access map with count %d\n", count);
+	//free(ICA_list);
+	free(removed_list);
+	free(plane_list);
 }
 
 // note that the coordinates should be normalized
@@ -709,7 +1209,7 @@ gettimeofday(&t2, NULL);
 	printf(" >>>>>>>  one iteration takes %f  ms.\n", elapsedTime);
 
         elem_size = (int) array->elem_count;
-        ICA_list = malloc( myc*sizeof(double) );
+        ICA_list = (double*)malloc( myc*sizeof(double) );
 	for (i=0; i<myc; i++)
 	  ICA_list[i] = 0.0;
 
@@ -793,6 +1293,7 @@ gettimeofday(&t2, NULL);
           //printf(" progress i: %d, j: %d \n", i, j );
 	}
         printf(" finished calculating the access map \n");
+	//free(ICA_list);
 }
 
 void print_map(int** access_map){
@@ -1335,7 +1836,7 @@ void set_outer(int*** data_array, int dis, int len){
 int
 main (int argc, char **argv)
 {
-  int                 i;
+  int                 i, j;
   int                 mpiret;
   int                 wrongusage;
   unsigned            crc, gcrc;
@@ -1430,6 +1931,20 @@ tool_r[4] = 0.79375;
   //   config_name, refine_level, level_shift);
   printf (" @@@@@@@@@@ test coordinates eighth %d %d %d \n", eighth, center, center_z);
 
+  int ttt[] = {12, 33, 49, 55, 61, 72, 83, 99, 111, 120, 44};
+  int kkk;
+srand(time(NULL));
+for (j=0; j<10; j++){
+kkk = rand()%100;
+ttt[10] = kkk;
+  sort_test(ttt, 11, 10);
+printf( "doing test of sorting using %d: ", kkk);
+  for (i=0; i<11; i++)
+    printf("%d, ", ttt[i]);
+  printf("\n\n\n");
+}
+
+
   /* start overall timing */
   mpiret = sc_MPI_Barrier (mpi->mpicomm);
   //SC_CHECK_MPI (mpiret);
@@ -1493,8 +2008,8 @@ gettimeofday(&t2, NULL);
   elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
   printf(" ===========  >>>>>>>>>>>  operation p4est accessMap elapsedTime %f  ms.\n", elapsedTime);
 
-  print_map(access_map2);
-  //compare_map();
+  //print_map(access_map2);
+  compare_map();
   //check_data_fields(p4est_out);
   //check_data_fields(p4est1);
  
@@ -1511,7 +2026,7 @@ gettimeofday(&t2, NULL);
   printf("finish operations here, start writing file !!!\n");
 
 #ifdef P4EST_TIMINGS_VTK
-  p4est_vtk_write_file (p4est1, NULL, "tree_head");
+  //p4est_vtk_write_file (p4est1, NULL, "tree_head");
   //p4est_vtk_write_file (p4est1, NULL, "tree1_teapot");
   //p4est_vtk_write_file (p4est2, NULL, "tree_second");
   //p4est_vtk_write_file (p4est3, NULL, "tree_full");
