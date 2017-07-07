@@ -109,10 +109,10 @@ double tool_r[5];
 int tool_pieces = 5;
 double tool_length = 0;
 double val = 180.0/PI;
+//int map_row = 64;
+//int map_col = 128;
 int map_row = 64;
-int map_col = 128;
-//int map_row = 128;
-//int map_col = 256;
+int map_col = 64;
 int** access_map1;
 int** access_map2;
 Point3d **rotate_vector;
@@ -169,7 +169,7 @@ void check_data_fields(p4est_t *p4est){
           s += array->elem_size;
           myc++;
         } 
-        printf("\n quadrant counts: %d, the element coutn in the list: %d\n", myc, (int)(array->elem_count));
+        printf("\n quadrant counts: %d, the element count in the list: %d\n", myc, (int)(array->elem_count));
 }
 
 
@@ -342,7 +342,7 @@ double get_tool_intersect(double dist){
     
     //printf("end checking the arc, id %d, dist %f,  ", pid, dist);
     if (pid > tool_pieces - 1){
-      printf(" there must be something wrong with the tool border calculation!!! \n ");
+      printf(" there must be something wrong with the tool border calculation!!! with dist %f and id %d \n ", dist, pid);
       return -1.0;
     }
     if (ret == 0){
@@ -438,6 +438,29 @@ void mark_angle_range(double sita1, double sita2, double sigma1, double sigma2,
 	//printf("end \n");
 }
 
+void mark_plane_all(double offsi, double offsj, double offsk, double ica, int** access_map){
+	
+	double vec_x, vec_y, vec_z;
+	double temp, angle;
+	int r, c;
+	for ( r=0; r<map_row; r++ )
+	for ( c=0; c<map_col; c++ ){ 
+	  //sita = c * 180.0/map_col / val;
+	  //sigma = r * 360.0/map_row / val; 
+	  //vec_x = sin(sita)*cos(sigma);
+	  //vec_y = sin(sita)*sin(sigma);
+	  //vec_z = cos(sita);
+	  vec_x = rotate_vector[r][c].x;
+	  vec_y = rotate_vector[r][c].y;
+	  vec_z = rotate_vector[r][c].z;
+	  temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z);
+	  angle = acos(temp) * val;
+	  if ( angle <= ica ) access_map[r][c] = 1;
+	} 
+	/*
+	*/
+}
+
 void mark_plane(double offsi, double offsj, double offsk, double ica, int** access_map){
 	double sita, sigma;
 	double vk, v_sig;
@@ -460,6 +483,10 @@ void mark_plane(double offsi, double offsj, double offsk, double ica, int** acce
 	  else
 	    mark_angle_range(sita-ica, sita+ica, sigma-v_sig, sigma+v_sig, offsi, offsj, offsk, vk, access_map);
 	}
+}
+
+int fequal(double a, double b){
+	return fabs(a-b) < 0.000001;
 }
 
 double distance_plane(Plane plane){
@@ -669,12 +696,13 @@ void sort_planes(Plane* p_list, int size, int id){
 
 // note that the size of the sort_list should be one larger than the original
 // for example, sort_list is allocated as 101, but the size_k is 100
-int sample_planes(Plane* p_list, int size, Plane* sort_list, int size_k){
+int sample_planes(Plane* p_list, int* removed_list, int size, Plane* sort_list, int size_k){
 	int i, j;
 	int s = 0;
 	int crossed;
 	double x, y, z, vk;
 	double temp, dist;
+
 	for (i=0; i<size; i++){
 	  if (s == 0){
 	    sort_list[0].a = p_list[i].a;
@@ -724,20 +752,22 @@ int sample_planes(Plane* p_list, int size, Plane* sort_list, int size_k){
 		  sort_list[j].k = p_list[i].k;
 
 		  sort_planes(sort_list, s, j);
+		  break;
 		}
 		else {
 		  // right here, we can directly mark the plane
 		  // to avoid the future redundant checking
+		  //removed_list[i] = 1;
 		  break;
 		}
 	      } else{
 		//checking the same plane
+		printf("checking the same plane id in sort %d id in original %d !!!\n", j, i);
 		break;
 	      } 
 	    }	
 	  }
 	}
-	
 	return s;
 }
 
@@ -781,7 +811,6 @@ void mark_redundant_planes(Plane* p_list, int* removed_list, int size, double xt
 	if (sp != 1){
 	  printf(" multiple or no original plane (%d) is detected ===>>>> error!!!! \n ", sp);
 	}
-	//printf(" >>>>>>>  # reduced planes: %d from: %d, using plane (%f, %f, %f, %f) !!!!!\n", reduced, size, xt, yt, zt, kt);
 }
 
 //given a normal vector, divide all other vectors into 4 areas based on moved x,y
@@ -914,9 +943,10 @@ void check_plane_list(Plane* p_list, int size){
 
 	printf("enter to check plane list: \n");
 	for (i=0; i<size; i++){
-	  if ( temp.a==p_list[i].a && temp.b==p_list[i].b && temp.c==p_list[i].c ){
-	    printf(" id is %d \n", i);
-	  }  
+	  //if ( temp.a==p_list[i].a && temp.b==p_list[i].b && temp.c==p_list[i].c ){
+	  if ( fequal(p_list[i].a, -0.182901) )
+            printf("id is %d error plane [%f, %f, %f, %f (%f)] \n ", i, p_list[i].a, p_list[i].b, p_list[i].c, p_list[i].k, distance_plane(p_list[i]));
+	    
 	}
 }
 
@@ -929,24 +959,30 @@ void new_alg_reduction(Plane* p_list, int* removed_list, int size, int k){
 	double dist;
 	int before_num, after_num;
 
-	sort_list = (Plane*)malloc((k+1)*sizeof(Plane));	
- 	actual_num = sample_planes(p_list, size, sort_list, k);
-	printf("claim %d planes, the actual sample planes: %d \n", k, actual_num);
-	/*
-	for (i=0; i<actual_num; i++){
-	  x = sort_list[i].a; 
-	  y = sort_list[i].b; 
-	  z = sort_list[i].c; 
-	  vk = sort_list[i].k;
-	  dist = distance_plane(sort_list[i]);
-	  printf("the sampled plane: %f, %f, %f, %f with dist: %f\n", x, y, z, vk, dist);
-	}
-	*/
+	struct timeval t1, t2, t3;
+  	double elapsedTime;
 
+	gettimeofday(&t1, NULL);
+	sort_list = (Plane*)malloc((k+1)*sizeof(Plane));	
+ 	actual_num = sample_planes(p_list, removed_list, size, sort_list, k);
+	printf("claim %d planes, the actual sample planes: %d \n", k, actual_num);
+	gettimeofday(&t2, NULL);
+
+	//for (i=0; i<10; i++){
+	//  x = sort_list[i].a; 
+	//  y = sort_list[i].b; 
+	//  z = sort_list[i].c; 
+	//  vk = sort_list[i].k;
+	//  dist = distance_plane(sort_list[i]);
+	//  printf("the sampled plane: %.15le, %.15le, %.15le, %.15le with dist: %.15le\n", x, y, z, vk, dist);
+	//}
+
+	/*
 	if(check_plane_cross(sort_list, actual_num) == 0){
 	  printf(" there is redundance in the sampled planes, alg needs debug!!!!!\n");
 	}else
 	  printf(" all samples planes are crossed, passed !!!!!\n");
+	*/
 	
 	before_num = 0;	
 	for (i=0; i<size; i++){
@@ -963,8 +999,18 @@ void new_alg_reduction(Plane* p_list, int* removed_list, int size, int k){
 	for (i=0; i<size; i++){
 	  if (removed_list[i]==0) after_num++;
 	}
+	gettimeofday(&t3, NULL);
+	
+	elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+	elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+	printf(" *****  sample planes elapsedTime %f  ms, ", elapsedTime);
+	elapsedTime = (t3.tv_sec - t2.tv_sec) * 1000.0;      // sec to ms
+	elapsedTime += (t3.tv_usec - t2.tv_usec) / 1000.0;   // us to ms
+	printf(" *****  mark redundant planes elapsedTime %f  ms.\n", elapsedTime);
+
+
 	printf("\n =====>>>>>>> the number of planes is reduced from %d to %d !!!!\n", before_num, after_num);
-	check_plane_list(p_list, size);
+	//check_plane_list(p_list, size);
 }
 
 void planes_reduction(Plane* p_list, int* removed_list, int size){
@@ -1036,7 +1082,7 @@ void mark_map(p4est_t *p4est, int x, int y, int z){
         sc_array_t *array;
         p4est_quadrant_t *q;
 	p4est_qcoord_t      unit_len;
-  	struct timeval t1, t2;
+  	struct timeval t1, t2, t3;
   	double elapsedTime;
         int i, j, k;
         int elem_size;
@@ -1061,7 +1107,7 @@ void mark_map(p4est_t *p4est, int x, int y, int z){
 	char *s;
 	Plane *plane_list;
 	int *removed_list;
-	
+		
         unit_len = P4EST_QUADRANT_LEN (refine_level);
         tree = p4est_tree_array_index(p4est->trees, 0);
 	quads = &(tree->quadrants);
@@ -1131,22 +1177,7 @@ gettimeofday(&t2, NULL);
           ICA_list[ica_id] = ica; 
 	  if (ica >= 90) printf("note: large ica %f!!!!!\n", ica);
 	  
-	  /*
-	  for ( r=0; r<map_row; r++ )
-	  for ( c=0; c<map_col; c++ ){ 
-	    //sita = c * 180.0/map_col / val;
-	    //sigma = r * 360.0/map_row / val; 
-	    //vec_x = sin(sita)*cos(sigma);
-	    //vec_y = sin(sita)*sin(sigma);
-	    //vec_z = cos(sita);
-	    vec_x = rotate_vector[r][c].x;
-	    vec_y = rotate_vector[r][c].y;
-	    vec_z = rotate_vector[r][c].z;
-	    temp = (offsi*vec_x + offsj*vec_y + offsk*vec_z);
-	    angle = acos(temp) * val;
-	    if ( angle <= ica ) access_map1[r][c] = 1;
-	  } 
-	  */
+	  
 	  plane_list[ica_id].a = offsi; 
 	  plane_list[ica_id].b = offsj; 
 	  plane_list[ica_id].c = offsk; 
@@ -1162,10 +1193,13 @@ gettimeofday(&t2, NULL);
           if (ICA_list[i] >= 360.0)
 	  printf("360 element: %f ", ICA_list[i]);
 	}
-	
+
+	printf("\n/////////**************************//////////////////\n");
+	gettimeofday(&t1, NULL);
 	//planes_reduction(plane_list, removed_list, myc);
 	new_alg_reduction(plane_list, removed_list, myc, 100);
-	//printf("testing the new alg!!!\n");
+	gettimeofday(&t2, NULL);
+	
 	count = 0;
 	for (i=0; i<myc; i++){
 	  offsi = plane_list[i].a; 
@@ -1176,12 +1210,23 @@ gettimeofday(&t2, NULL);
 	  if (removed_list[i] == 0)
           { 
 	  mark_plane(offsi, offsj, offsk, ica, access_map2);
+	  //mark_plane_all(offsi, offsj, offsk, ica, access_map2);
 	  count++; 
 	  }
+	  
  	}
+	gettimeofday(&t3, NULL);
+
+        printf(" finished calculating the access map with count %d\n", count);
+	elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
+	elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
+	printf(" *****  new alg reduction elapsedTime %f  ms, ", elapsedTime);
+	elapsedTime = (t3.tv_sec - t2.tv_sec) * 1000.0;      // sec to ms
+	elapsedTime += (t3.tv_usec - t2.tv_usec) / 1000.0;   // us to ms
+	printf(" *****  generating map based on redundant elapsedTime %f  ms.\n", elapsedTime);
+	printf("/////////**************************//////////////////\n");
 
 	//printf("\nend ica list two counts: %d %d\n", ica_id, myc);
-        printf(" finished calculating the access map with count %d\n", count);
 	//free(ICA_list);
 	//free(removed_list);
 	//free(plane_list);
@@ -1655,10 +1700,13 @@ int*** read_array(const char *file_name){
   int len;
   FILE * fp;
   char *line = NULL;
+  char *ptr;
   ssize_t read;
   size_t slen = 0;
   int data;
   int*** test_array;
+  uint64_t st = (1 << (refine_level)) - 1;
+  uint64_t temp;
 
   fp = fopen(file_name, "r");
   //fp = fopen("/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/head-volume", "r");
@@ -1668,8 +1716,9 @@ int*** read_array(const char *file_name){
     printf(" can not open file ! \n");
     exit(1);
   }
-  read = getline(&line, &slen, fp);
-  len = (int)read - 2;
+  //read = getline(&line, &slen, fp);
+  //len = (int)read - 2;
+  len = 1 << refine_level;
   test_array = (int***) malloc(len * sizeof(int **));
   if (cube_len == -1) {
     cube_len = len;
@@ -1681,19 +1730,41 @@ int*** read_array(const char *file_name){
     for (j=0; j<len; j++)
       test_array[i][j] = (int *) malloc ( len* sizeof(int) );
   }
+  for ( i=0; i<len; i++ )
+  for ( j=0; j<len; j++ ) 
+  for ( k=0; k<len; k++ )
+    test_array[i][j][k] = 0;
   //printf ("length %d line: %s \n", len, line);
   fseek(fp, 0, SEEK_SET);
 
+  /*
   for ( i=0; i<len; i++ )
   for ( j=0; j<len; j++ ) {
     if ((read = getline(&line, &slen, fp)) != -1){
       //printf ("length %zu line: %s \n", read, line);
       for ( k=0; k<len; k++ ){
         test_array[i][j][k] = (int)line[k] - 48;
-        // 
         //if (test_array[i][j][k] == 0) test_array[i][j][k] = 2;
       }
     } 
+  }
+  */
+  while((read = getline(&line, &slen, fp)) != -1){
+    ptr = strtok(line, " ");
+    while (ptr != NULL)  // while there's more to the string
+    {
+	temp = atoi(ptr);
+	i = (temp >> (2*refine_level)) & st;
+	j = (temp >> refine_level) & st;
+	k = temp & st;
+	if (i > st || j > st || k > st){
+		printf( "the indexing is out of bound" );
+		break;
+	}
+	//cout << temp << " = >>>  id: " << i << "," << j << "," << k << std::endl;
+	test_array[i][j][k] = 1;
+	ptr = strtok(NULL, " "); // and keep splitting
+    }
   }
   fclose(fp);
   printf ("finish loading the volume file into array!\n");
@@ -1897,6 +1968,7 @@ main (int argc, char **argv)
   int                 repartition_lnodes;
 
   double x, ret;
+  int cut_d;
 tool_len[0] = 22; // start 0
 tool_len[1] = 78;  // start 22
 tool_len[2] = 15.94; // start at 100
@@ -1918,7 +1990,7 @@ tool_r[4] = 0.79375;
   struct timeval t1, t2, t3, t4, t5;
   double elapsedTime;
   //*********
-  const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/head-volume";
+  const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/head-volume-10";
   //const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/teapot-volume";
   //const char *fname1 = "/home/xin/Dropbox/3d-printing-paper/vs-projects/Project1/Project1/stl-files/candle-volume";
   test_array1 = read_array(fname1);  
@@ -1961,7 +2033,7 @@ tool_r[4] = 0.79375;
   int ttt[] = {12, 33, 49, 55, 61, 72, 83, 99, 111, 120, 44};
   int kkk;
   srand(time(NULL));
-  for (j=0; j<10; j++){
+  for (j=0; j<20; j++){
     kkk = rand()%100;
     ttt[10] = kkk;
     sort_test(ttt, 11, 10);
@@ -2028,12 +2100,13 @@ tool_r[4] = 0.79375;
   //path_offset(test_array1, 19, 10, cube_len); 
 
 gettimeofday(&t1, NULL);
+  cut_d = 1 << refine_level;
   //mark_accessibility_map(p4est1, 128, 128, 255);
-  mark_map(p4est1, 128, 128, 255);
+  mark_map(p4est1, cut_d/2, cut_d/2, cut_d-1);
 gettimeofday(&t2, NULL);
   elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000.0;      // sec to ms
   elapsedTime += (t2.tv_usec - t1.tv_usec) / 1000.0;   // us to ms
-  printf(" ===========  >>>>>>>>>>>  operation p4est accessMap elapsedTime %f  ms.\n", elapsedTime);
+  printf(" \n ===========  >>>>>>>>>>>  operation p4est accessMap elapsedTime %f  ms.\n", elapsedTime);
 
   //print_map(access_map2);
   //compare_map();

@@ -27,7 +27,7 @@
 #define PI 3.14159265
 #define P4EST_TIMINGS_VTK 
 
-#define P4EST_REFINE_LEVEL 8 
+#define P4EST_REFINE_LEVEL 10 
 /** The dimension of the image data. */
 #define P4EST_REFINE_LENGTH (1 << P4EST_REFINE_LEVEL)
 static const int          refine_level = P4EST_REFINE_LEVEL;
